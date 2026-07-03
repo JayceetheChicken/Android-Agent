@@ -85,7 +85,11 @@ Zusammenarbeit mehrerer KI-Tools. Neue Dependencies nur mit Eintrag hier.
 ## 8. React Navigation statt Expo Router (2026-07-03)
 
 **Entscheidung:** Klassisches React Navigation (`createBottomTabNavigator`)
-mit explizitem `src/app/navigation.tsx`, kein dateibasiertes Routing.
+mit explizitem `src/main/navigation.tsx`, kein dateibasiertes Routing.
+Der Ordner heißt bewusst `src/main` statt `src/app`, weil die Expo CLI einen
+Ordner namens `app`/`src/app` automatisch als Expo-Router-Root interpretiert
+("Using src/app as the root directory for Expo Router") – auch ohne
+installiertes expo-router. Der neutrale Name vermeidet diese Magie.
 
 **Warum:** 6 statische Tabs brauchen kein File-Routing. Explizite Navigation
 ist für KI-Tools leichter nachzuvollziehen (eine Datei statt Ordner-Konvention),

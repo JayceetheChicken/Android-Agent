@@ -42,7 +42,7 @@ Danach in der App unter **Settings** eintragen:
 
 ```
 src/
-  app/               App-Root + Bottom-Tab-Navigation
+  main/              App-Root + Bottom-Tab-Navigation
   screens/           Chat, Agent, Dateien, E-Mail, Browser, Settings
   components/        MessageBubble, PlanStepCard, ConfirmActionModal, Theme
   agent/

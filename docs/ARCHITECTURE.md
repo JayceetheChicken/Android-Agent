@@ -28,9 +28,9 @@ Beide treffen sich nur im Tool-Executor und in der Bestätigungs-Bridge.
 
 | Pfad | Zweck |
 | --- | --- |
-| `App.tsx` (Root) | Re-Export von `src/app/App.tsx` (Expo-Konvention) |
-| `src/app/App.tsx` | NavigationContainer, Theme, SafeArea |
-| `src/app/navigation.tsx` | Bottom-Tabs: Chat, Agent, Dateien, E-Mail, Browser, Settings |
+| `App.tsx` (Root) | Re-Export von `src/main/App.tsx` (Expo-Konvention) |
+| `src/main/App.tsx` | NavigationContainer, Theme, SafeArea |
+| `src/main/navigation.tsx` | Bottom-Tabs: Chat, Agent, Dateien, E-Mail, Browser, Settings |
 | `src/screens/*` | Ein Screen pro Modul, keine Business-Logik in Screens außer UI-State |
 | `src/components/*` | Wiederverwendbare UI: `MessageBubble`, `PlanStepCard`, `ConfirmActionModal`, `theme.ts` |
 | `src/types/*` | Alle geteilten Typen; `types/tools.ts` definiert die Tool-Namen als Const-Arrays |
