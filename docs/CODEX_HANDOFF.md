@@ -5,7 +5,7 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 
 ## Was bereits gebaut wurde (MVP-Gerüst, Stand 2026-07-03)
 
-- Expo SDK 57 / React Native 0.86 / TypeScript strict, Bottom-Tab-Navigation mit 6 Screens:
+- Expo SDK 56 / React Native 0.85 / TypeScript strict, Bottom-Tab-Navigation mit 6 Screens:
   Chat, Agent, Dateien, E-Mail, Browser, Settings.
 - **Agent-Plan-System:** LLM erzeugt JSON-Pläne (`src/agent/planner.ts`),
   strenges Parsen/Validieren, max. 10 Schritte.

@@ -98,3 +98,21 @@ und `src/`-Struktur bleibt frei von Framework-Magie.
 
 **Warum:** Kein Klartext-HTTP, keine `file:`/`intent:`/`javascript:`-Schemata –
 letztere wären ein Sandbox-Escape Richtung System oder lokale Dateien.
+
+## 10. Downgrade von Expo SDK 57 auf SDK 56 (2026-07-03)
+
+**Entscheidung:** Das Projekt wurde initial mit SDK 57 (`~57.0.2`) angelegt,
+noch am selben Tag aber auf SDK 56 (`^56.0.0`, per `npx expo install --fix`
+konsistent aufgelöst) zurückgestuft.
+
+**Warum:** SDK 57 war zum Zeitpunkt der Anlage gerade erst auf npm
+veröffentlicht. Die Expo-Go-App im Play Store hatte den Rollout für SDK 57
+noch nicht nachgezogen, obwohl expo.dev/go es bereits als aktuell listete –
+ein bekannter Lag zwischen npm-Release und App-Store-Rollout. Symptom war
+der Fehler "Project is incompatible with this version of Expo Go" auch nach
+Neuinstallation der App. SDK 56 ist stabil etabliert und funktioniert
+garantiert mit der aktuell installierbaren Expo-Go-App. Die verwendete
+`expo-file-system`-API (`File`/`Directory`/`Paths`-Klassen) ist in SDK 56
+identisch zu SDK 57, daher war keine Code-Änderung nötig – nur
+`package.json`/`app.json` (Config-Plugin-Eintrag für `expo-status-bar`
+kam durch `expo install --fix` hinzu).

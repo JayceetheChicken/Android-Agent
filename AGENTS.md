@@ -24,6 +24,13 @@ niemals das Android-System steuern.
 
 ## Expo-Hinweis
 
-Expo SDK 57 – bei API-Fragen die versionierten Docs nutzen:
-https://docs.expo.dev/versions/v57.0.0/
+Expo SDK 56 – bei API-Fragen die versionierten Docs nutzen:
+https://docs.expo.dev/versions/v56.0.0/
 (insbesondere expo-file-system: neue klassenbasierte API mit `File`/`Directory`/`Paths`).
+
+**Warum SDK 56 und nicht 57:** SDK 57 war zum Zeitpunkt des Projektstarts (2026-07-03)
+gerade erst auf npm veröffentlicht; die Expo-Go-App im Play Store hatte den Rollout
+noch nicht nachgezogen ("Project is incompatible with this version of Expo Go").
+SDK 56 ist stabil etabliert und mit der aktuell installierbaren Expo-Go-App kompatibel.
+Vor einem Upgrade auf SDK 57 (oder neuer) prüfen, ob Expo Go im Play Store das SDK
+bereits unterstützt.
