@@ -1,0 +1,100 @@
+# Architekturentscheidungen (ADR-Light)
+
+Jede wichtige Entscheidung wird hier festgehalten: Kontext → Entscheidung → Begründung.
+Neue Einträge unten anhängen, alte nie löschen (höchstens als "überholt" markieren).
+
+---
+
+## 1. Agent erzeugt nur JSON-Pläne (2026-07-03)
+
+**Entscheidung:** Das LLM liefert ausschließlich einen JSON-Plan
+(`{ goal, steps: [{ tool, params, reason }] }`). Ausführung passiert getrennt im Tool-Executor.
+
+**Warum:**
+- LLM-Output ist damit *Daten*, nie Code – kein `eval`, keine Prompt-Injection,
+  die direkt Aktionen auslöst.
+- Der Nutzer kann den kompletten Plan **vor** der Ausführung prüfen (Review-Phase).
+- Pläne sind validierbar (bekannte Tools, Schritt-Limit) und deterministisch abarbeitbar.
+- Einfach zu debuggen und zu testen (Plan-Parsing ist eine pure Function).
+
+## 2. Riskante Aktionen brauchen Nutzerbestätigung (2026-07-03)
+
+**Entscheidung:** Tools mit Außenwirkung oder Datenverlust (`send_email`,
+`submit_form`, `delete_file`, `connect_email_account`, `open_url`,
+`download_file`) tragen `risky: true` und laufen immer durch `requestConfirmation`.
+Ohne registrierten UI-Handler wird abgelehnt (fail closed).
+
+**Warum:**
+- LLMs halluzinieren und sind über Web-/Mail-Inhalte manipulierbar
+  (Prompt Injection). Die letzte Entscheidung über irreversible oder nach
+  außen sichtbare Aktionen muss beim Menschen liegen.
+- Fail closed statt fail open: Ein Programmierfehler (vergessener Handler)
+  darf nie zu unbeaufsichtigter Ausführung führen.
+
+## 3. Agent arbeitet nur in der App-Sandbox (2026-07-03)
+
+**Entscheidung:** Alle Dateioperationen laufen über `sandboxFs.ts` und sind auf
+`<documentDirectory>/sandbox/` beschränkt; `sanitizeSandboxPath()` blockt
+absolute Pfade, Laufwerksbuchstaben, URI-Schemata und `..`. Keine
+Android-Systemsteuerung (keine Accessibility-Services, keine fremden Intents).
+
+**Warum:**
+- Die App soll ein kontrollierter "Mini-Computer" sein, kein Autopilot für das
+  Gerät. Schadenspotenzial ist damit strukturell begrenzt, nicht nur per Prompt.
+- Path-Traversal ist die naheliegendste Angriffs-/Fehlerklasse bei
+  LLM-generierten Pfaden – zentrale Validierung an einer Stelle statt in jedem Tool.
+
+## 4. Tool-Registry als Single Source of Truth (2026-07-03)
+
+**Entscheidung:** `agent/tools/definitions.ts` definiert alle Tools inkl.
+Beschreibung, Parametern und `risky`-Flag. Der Planner-System-Prompt wird
+daraus generiert; die Handler-Records sind über die Tool-Namen typisiert.
+
+**Warum:** Prompt, Executor und UI können nicht auseinanderlaufen. Ein neues
+Tool ohne Handler ist ein Compile-Fehler, ein Tool außerhalb der Registry wird
+vom Parser abgelehnt.
+
+## 5. E-Mail und Browser-DOM zuerst als Mock/Stub (2026-07-03)
+
+**Entscheidung:** `emailService.ts` ist ein In-Memory-Mock mit finaler
+Schnittstelle. Browser-DOM-Tools (`click_element`, `type_text`, `submit_form`,
+`screenshot_page`, `download_file`) sind Stubs, die `ok: false` melden.
+
+**Warum:** Erst die Architektur (Plan → Bestätigung → Ausführung) stabilisieren,
+ohne OAuth-Komplexität und echte Nebenwirkungen. Die Tool-Signaturen sind final,
+später wird nur der Service-Unterbau ausgetauscht (siehe ARCHITECTURE.md).
+
+## 6. Secrets nur in expo-secure-store (2026-07-03)
+
+**Entscheidung:** Der API-Key liegt ausschließlich in `expo-secure-store`
+(Android Keystore). Base-URL/Modell (keine Secrets) in AsyncStorage.
+Keine Keys in Code, Config-Dateien, Logs oder der Datei-Sandbox.
+
+**Warum:** AsyncStorage ist unverschlüsselt; Code/Repo sind öffentlich
+kopierbar. SecureStore ist der plattformübliche sichere Speicher.
+
+## 7. Minimale Dependencies, keine UI-Bibliothek (2026-07-03)
+
+**Entscheidung:** Nur React Navigation (Tabs), WebView, AsyncStorage,
+SecureStore, expo-file-system. Styling per StyleSheet + kleinem Token-Modul
+(`components/theme.ts`), Icons als Emoji.
+
+**Warum:** Jede Dependency ist Update- und Audit-Aufwand und erschwert die
+Zusammenarbeit mehrerer KI-Tools. Neue Dependencies nur mit Eintrag hier.
+
+## 8. React Navigation statt Expo Router (2026-07-03)
+
+**Entscheidung:** Klassisches React Navigation (`createBottomTabNavigator`)
+mit explizitem `src/app/navigation.tsx`, kein dateibasiertes Routing.
+
+**Warum:** 6 statische Tabs brauchen kein File-Routing. Explizite Navigation
+ist für KI-Tools leichter nachzuvollziehen (eine Datei statt Ordner-Konvention),
+und `src/`-Struktur bleibt frei von Framework-Magie.
+
+## 9. Nur https im Mini-Browser (2026-07-03)
+
+**Entscheidung:** `browserService.validateUrl` erlaubt ausschließlich `https:`;
+`open_url` ist zusätzlich bestätigungspflichtig.
+
+**Warum:** Kein Klartext-HTTP, keine `file:`/`intent:`/`javascript:`-Schemata –
+letztere wären ein Sandbox-Escape Richtung System oder lokale Dateien.
