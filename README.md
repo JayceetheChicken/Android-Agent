@@ -38,6 +38,77 @@ Danach in der App unter **Settings** eintragen:
 - **Base-URL** – z. B. `https://api.openai.com/v1` (jede OpenAI-kompatible API funktioniert)
 - **Modellname** – z. B. `gpt-4o-mini`
 
+## Gmail einrichten (OAuth 2.0 mit PKCE)
+
+Die Gmail-Verbindung nutzt **kein Passwort und keinen API-Key**, sondern
+OAuth 2.0 mit PKCE: Der Login passiert auf Googles eigener Seite im
+System-Browser, die App erhält nur Tokens und speichert sie verschlüsselt in
+`expo-secure-store`. Es gibt **kein Client-Secret** – der PKCE-Flow für
+installierte Apps braucht keines.
+
+### 1. Google Cloud Console konfigurieren
+
+Auf https://console.cloud.google.com:
+
+1. **Projekt anlegen** (oder bestehendes auswählen).
+2. **Gmail API aktivieren:** APIs & Services → Library → „Gmail API" → Enable.
+3. **OAuth-Zustimmungsbildschirm:** APIs & Services → OAuth consent screen →
+   User Type **External** → App-Name/E-Mail ausfüllen → unter **Test users**
+   die eigene Gmail-Adresse hinzufügen.
+   *Hinweis: Solange die App im Status „Testing" ist, können sich nur
+   Test-User anmelden und Refresh-Tokens laufen nach 7 Tagen ab – für die
+   Entwicklung ausreichend.*
+4. **Client-IDs anlegen:** APIs & Services → Credentials → Create Credentials
+   → OAuth client ID:
+   - Typ **Android** → Package name: `com.androidagent.sandbox` (aus
+     `app.json`), SHA-1 des Debug-Keys (siehe unten) → ergibt die
+     **androidClientId**
+   - optional Typ **iOS** (Bundle-ID) → **iosClientId**
+   - optional Typ **Web** → **webClientId**
+
+SHA-1 des Debug-Keystores ermitteln (nach dem ersten `npx expo run:android`
+oder mit dem Standard-Android-Debug-Key):
+
+```bash
+keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androiddebugkey -storepass android
+```
+
+### 2. Client-IDs in der App eintragen
+
+In `src/config/googleOAuth.ts`:
+
+```ts
+export const GOOGLE_OAUTH_CONFIG = {
+  webClientId: '',
+  androidClientId: '1234567890-abc123.apps.googleusercontent.com', // deine ID
+  iosClientId: '',
+};
+```
+
+Scope: Es wird nur `https://www.googleapis.com/auth/gmail.modify` angefragt
+(lesen, Entwürfe, senden, archivieren, labeln). Der Vollzugriff-Scope
+`https://mail.google.com/` wird bewusst **nicht** verwendet.
+
+### 3. Development Build starten (wichtig!)
+
+Der OAuth-Redirect nutzt das App-Scheme `androidagent` – das funktioniert
+**nicht in Expo Go** (Expo Go hat sein eigenes Scheme, Google akzeptiert
+keine `exp://`-Redirects). Zum Testen der Gmail-Verbindung daher einen
+Development Build verwenden:
+
+```bash
+npx expo run:android   # baut die App nativ (Android Studio/SDK nötig)
+```
+
+Alles andere (Chat, Agent, Datei-Sandbox, Mock-E-Mail, Browser) funktioniert
+weiterhin auch in Expo Go.
+
+### 4. In der App verbinden
+
+E-Mail-Tab → **„Gmail verbinden"** → Google-Login im Browser → fertig.
+Der Status zeigt das verbundene Konto; „Test: Inbox suchen" lädt echte
+E-Mails. **„Gmail trennen"** widerruft den Zugriff und löscht die Tokens.
+
 ## Architektur (Kurzfassung)
 
 ```
@@ -52,7 +123,7 @@ src/
   services/
     ai/              OpenAI-kompatibler Client (POST /chat/completions)
     storage/         Settings (SecureStore/AsyncStorage) + Datei-Sandbox
-    email/           Mock-E-Mail-Service (echte Provider kommen später)
+    email/           Provider-Schicht: Gmail (OAuth/PKCE) + Mock-Fallback
     browser/         Command-Bridge zwischen Agent und WebView
   types/             Gemeinsame TypeScript-Typen
   utils/             Pfad-Validierung, JSON-Extraktion

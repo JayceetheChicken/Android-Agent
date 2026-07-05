@@ -18,6 +18,11 @@ export async function executeStep(step: PlanStep): Promise<ToolResult> {
     return { ok: false, output: `Unknown tool: "${step.tool}". Step rejected.` };
   }
 
+  // TODO(full-access-mode): a future, consciously enabled "Full Access" mode
+  // may skip per-step confirmation for actions INSIDE connected services
+  // (e.g. Gmail send/archive/label) – never for anything outside the app
+  // sandbox. Until that mode exists, every risky tool confirms. Do not add
+  // any other bypass. See docs/TASKS.md ("Full Access Mode").
   if (definition.risky) {
     const approved = await requestConfirmation({
       tool: definition.name,

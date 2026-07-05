@@ -31,12 +31,35 @@
 - [ ] `screenshot_page` (benötigt neue Dependency, vorher in DECISIONS.md begründen)
 - [ ] Domain-Allowlist/Blocklist für den Mini-Browser
 
-## Meilenstein 4 – Echte E-Mail
+## Meilenstein 4 – Echte E-Mail (Gmail) – Kern fertig 2026-07-05
 
-- [ ] E-Mail-Service-Interface extrahieren (Mock als eine Implementierung)
-- [ ] Gmail über OAuth 2.0 (PKCE, `expo-auth-session`), Tokens in SecureStore
-- [ ] Entwürfe/Senden über Gmail API; `send_email` bleibt bestätigungspflichtig
-- [ ] Bestätigungsdialog zeigt Empfänger + Betreff prominent
+- [x] E-Mail-Service-Interface extrahieren (`services/email/types.ts`, Mock als eine Implementierung)
+- [x] Gmail über OAuth 2.0 (PKCE, `expo-auth-session`), Tokens nur in SecureStore (`tokenStore.ts`)
+- [x] Gmail API v1: Suche, Lesen, Entwürfe, Antwort-Entwürfe, Senden, Archivieren, Labeln
+- [x] EmailScreen: Status, Gmail verbinden/trennen, Mock verbinden, Inbox-Test
+- [x] Agent-Tools auf Provider-Schicht umgestellt (Tool-Namen unverändert)
+- [ ] Google-Client-IDs eintragen (`src/config/googleOAuth.ts`) und auf Gerät testen (Dev-Build!)
+- [ ] Bestätigungsdialog zeigt bei `send_email` Empfänger + Betreff prominent
+- [ ] Token-Refresh verbessern: Ablauf des Refresh-Tokens sauber behandeln
+      (Testing-Status: 7 Tage), Nutzer aktiv zum Re-Login auffordern
+- [ ] Suche: Gmail-Query-Syntax (`from:`, `label:`, `newer_than:`) im Planner-Prompt dokumentieren
+- [ ] Pagination für mehr als 15 Suchergebnisse
+
+## Meilenstein 5 – Full Access Mode
+
+- [ ] Konzept: bewusste Aktivierung (eigener Settings-Schalter + Warndialog)
+- [ ] Scope: nur Aktionen INNERHALB verbundener Dienste (z. B. Gmail senden/
+      archivieren/labeln) ohne Einzelbestätigung; Datei-Löschen bleibt bestätigungspflichtig?
+      → Entscheidung dokumentieren
+- [ ] Nie ohne Bestätigung: Konto verbinden/trennen, alles außerhalb der App-Sandbox
+- [ ] Audit-Log verpflichtend, sobald Full Access aktiv ist
+- [ ] Umsetzung am TODO-Anker in `src/agent/executor/toolExecutor.ts`
+
+## Meilenstein 6 – Outlook/Microsoft (später)
+
+- [ ] `outlookProvider.ts` gegen Microsoft Graph API (OAuth 2.0 + PKCE, MSAL-kompatibel)
+- [ ] Gleiches `EmailProvider`-Interface, keine Tool-/UI-Änderungen
+- [ ] Provider-Auswahl in den Settings (Mock/Gmail/Outlook)
 
 ## Später / Ideen
 
