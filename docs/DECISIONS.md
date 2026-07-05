@@ -120,3 +120,26 @@ garantiert mit der aktuell installierbaren Expo-Go-App. Die verwendete
 identisch zu SDK 57, daher war keine Code-Änderung nötig – nur
 `package.json`/`app.json` (Config-Plugin-Eintrag für `expo-status-bar`
 kam durch `expo install --fix` hinzu).
+
+**Überholt durch Entscheidung 11** – die Annahme "Play Store hat SDK 57 noch
+nicht ausgerollt" ließ sich nicht bestätigen; der Fehler bestand nach dem
+Downgrade auf dem Testgerät weiter unverändert fort.
+
+## 11. Zurück auf Expo SDK 57 (2026-07-03)
+
+**Entscheidung:** Downgrade aus Entscheidung 10 rückgängig gemacht
+(`npx expo install expo@^57.0.0 --fix`); Projekt läuft wieder auf SDK 57
+(`react-native` 0.86.0, `expo-file-system`/`expo-secure-store`/`expo-status-bar`
+`~57.0.0`).
+
+**Warum:** Der Fehler "Project is incompatible with this version of Expo Go"
+trat auf dem Testgerät unabhängig vom Projekt-SDK auf – der Downgrade auf
+SDK 56 hat das Symptom nicht behoben. Die offizielle Expo-Go-Download-Seite
+(https://expo.dev/go) listet SDK 57 als aktuelle Version; die Android-Client-
+Version 57.0.2 existiert und ist direkt als APK verfügbar. Ursache war also
+vermutlich nicht ein fehlender Play-Store-Rollout, sondern eine veraltete
+oder unvollständig aktualisierte Expo-Go-Installation auf dem Testgerät.
+**Lektion:** Bei "incompatible"-Fehlern zuerst die exakte, tatsächlich
+installierte Expo-Go-Version auf dem Gerät prüfen (App → Profil), statt das
+Projekt-SDK zu verändern. Passende APKs pro SDK-Version gibt es direkt unter
+https://expo.dev/go, unabhängig vom Play-Store-Rollout.

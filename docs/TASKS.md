@@ -2,7 +2,7 @@
 
 ## Meilenstein 1 – MVP-Gerüst ✅ (2026-07-03)
 
-- [x] Expo-Projekt (SDK 56, TypeScript strict)
+- [x] Expo-Projekt (SDK 57, TypeScript strict)
 - [x] Navigation + 6 Screens (Chat, Agent, Dateien, E-Mail, Browser, Settings)
 - [x] TypeScript-Typen für Tools, Pläne, Chat, E-Mail, Settings
 - [x] Tool-Registry mit `risky`/`mock`-Flags (23 Tools)
