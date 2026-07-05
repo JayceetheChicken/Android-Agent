@@ -16,10 +16,14 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
   `risky`- und `mock`-Flags. Der Planner-Prompt wird daraus generiert.
 - **Datei-Tools: echt implementiert**, sandboxed auf `<documentDirectory>/sandbox/`
   (`services/storage/sandboxFs.ts` + Pfad-Validierung in `utils/paths.ts`).
-- **Dateien-Tab verbessert:** Breadcrumb-Navigation, Erstellen, Lesen,
-  Umbenennen, Verschieben, Löschen mit Bestätigung und UI-gesteuerter Import
-  von Gerätedateien via `services/storage/importService.ts`.
-- **E-Mail-Tools: Mock** (`services/email/emailService.ts`, In-Memory-Postfach).
+- **E-Mail: echte Gmail-Anbindung über Provider-Schicht** (Stand 2026-07-05):
+  `services/email/emailService.ts` delegiert an den aktiven Provider –
+  `providers/gmailProvider.ts` (echte Gmail API v1, OAuth 2.0 + PKCE über
+  `auth/gmailOAuth.ts`, Tokens nur in `tokenStore.ts`/SecureStore) oder
+  `providers/mockEmailProvider.ts` (In-Memory-Fallback, bewusst erhalten).
+  Client-IDs: Platzhalter in `src/config/googleOAuth.ts` (lokal füllen,
+  README "Gmail einrichten"). Scope nur `gmail.modify`. OAuth-Test braucht
+  einen Development Build (`npx expo run:android`), nicht Expo Go.
 - **Browser-Tools: teilweise** – `open_url`/`go_back` steuern die echte WebView
   über `services/browser/browserService.ts`; DOM-Tools sind Stubs, die
   `ok: false` mit Hinweis zurückgeben.
@@ -35,11 +39,10 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 3. `src/agent/executor/toolExecutor.ts` – wie Schritte ausgeführt werden
 4. `src/agent/planner.ts` – Prompt-Erzeugung und Plan-Validierung
 5. `src/screens/AgentScreen.tsx` – UI-Fluss Plan → Review → Ausführung
-6. `docs/TASKS.md` – was als Nächstes ansteht
-
-Zusätzlich wichtig für Datei-Arbeiten: `src/screens/FilesScreen.tsx`,
-`src/services/storage/sandboxFs.ts` und
-`src/services/storage/importService.ts`.
+6. `src/services/email/` – Provider-Schicht: `types.ts` (Interface),
+   `emailService.ts` (Dispatch), `providers/`, `auth/gmailOAuth.ts`,
+   `tokenStore.ts`
+7. `docs/TASKS.md` – was als Nächstes ansteht
 
 ## Wie weiterarbeiten
 
@@ -51,20 +54,29 @@ Zusätzlich wichtig für Datei-Arbeiten: `src/screens/FilesScreen.tsx`,
   (Record über die Tool-Namen), der Planner-Prompt aktualisiert sich selbst.
 - Mock durch echte Implementierung ersetzen = nur den Service unter
   `src/services/` umbauen; Tool-Handler und UI bleiben stabil.
-- Gerätedatei-Import bleibt UI-gesteuert: kein Agent-Tool einbauen, das
-  Android-Speicher heimlich durchsucht oder den Picker automatisch öffnet.
 - Vor jedem Commit: `npm run typecheck`.
 - Jede Architekturentscheidung in `docs/DECISIONS.md` dokumentieren,
   erledigte Aufgaben in `docs/TASKS.md` abhaken.
 
 ## Nächste Features (Details in docs/TASKS.md)
 
-1. `read_page` echt implementieren (WebView-JS-Injection + Textextraktion).
-2. Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (beobachten → neu planen).
-3. Chat- und Agent-Verlauf persistieren (AsyncStorage).
-4. `download_file` mit `File.downloadFileAsync` in die Sandbox.
-5. Echte E-Mail-Anbindung (OAuth/PKCE, Tokens in SecureStore).
-6. Export von Sandbox-Dateien zurück in Downloads.
+1. Gmail-Verbindung auf Gerät testen (Client-IDs eintragen, Dev-Build).
+2. `read_page` echt implementieren (WebView-JS-Injection + Textextraktion).
+3. Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (beobachten → neu planen).
+4. Chat- und Agent-Verlauf persistieren (AsyncStorage).
+5. Full Access Mode (bewusst aktivierbar, nur innerhalb verbundener Dienste).
+6. Outlook/Microsoft als zweiter echter Provider (separater Meilenstein).
+
+## Wichtig bei E-Mail-Änderungen
+
+- Agent-Tools und UI reden NUR mit `emailService.ts`, nie direkt mit einem
+  Provider oder der Gmail API.
+- Tokens bleiben in `tokenStore.ts` (SecureStore) und in
+  `gmailProvider.ts`-internen Aufrufen. Kein Interface, kein Tool-Output,
+  kein Log darf Tokens enthalten.
+- Der Mock-Provider darf nicht entfernt werden (Fallback + Referenz).
+- Scope bleibt `gmail.modify`; `https://mail.google.com/` ist tabu.
+- Kein Client-Secret einführen – PKCE braucht keines.
 
 ## Sicherheitsregeln – dürfen NIE gebrochen werden
 
@@ -76,8 +88,6 @@ Zusätzlich wichtig für Datei-Arbeiten: `src/screens/FilesScreen.tsx`,
 3. **Fail closed:** Ohne registrierten Bestätigungs-Handler wird abgelehnt.
 4. **Sandbox-Grenze:** Jeder Dateipfad geht durch `sanitizeSandboxPath()`.
    Keine Dateizugriffe an `services/storage/sandboxFs.ts` vorbei.
-   Importierte Gerätedateien sind Kopien in der Sandbox; Originale bleiben
-   unverändert.
 5. **Keine Android-Systemsteuerung:** keine Accessibility-Services, keine
    Intents in fremde Apps, keine zusätzlichen Permissions ohne Nutzer-Diskussion.
 6. **Secrets:** API-Keys/Tokens nur in `expo-secure-store`. Nie hardcoden,

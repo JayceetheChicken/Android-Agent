@@ -64,6 +64,10 @@ Schnittstelle. Browser-DOM-Tools (`click_element`, `type_text`, `submit_form`,
 ohne OAuth-Komplexität und echte Nebenwirkungen. Die Tool-Signaturen sind final,
 später wird nur der Service-Unterbau ausgetauscht (siehe ARCHITECTURE.md).
 
+**Teilweise überholt durch Entscheidung 12:** E-Mail hat seit 2026-07-05 einen
+echten Gmail-Provider; der Mock bleibt als Fallback/Test-Provider erhalten.
+Browser-DOM-Tools sind weiterhin Stubs.
+
 ## 6. Secrets nur in expo-secure-store (2026-07-03)
 
 **Entscheidung:** Der API-Key liegt ausschließlich in `expo-secure-store`
@@ -144,20 +148,35 @@ installierte Expo-Go-Version auf dem Gerät prüfen (App → Profil), statt das
 Projekt-SDK zu verändern. Passende APKs pro SDK-Version gibt es direkt unter
 https://expo.dev/go, unabhängig vom Play-Store-Rollout.
 
-## 12. Gerätedateien nur per UI-Aktion importieren (2026-07-05)
+## 12. Gmail über OAuth 2.0 mit PKCE, hinter einer Provider-Schicht (2026-07-05)
 
-**Entscheidung:** `expo-document-picker` wurde als SDK-57-kompatible Dependency
-ergänzt (`expo-document-picker@~57.0.0`). Der Dateien-Tab nutzt den
-Android-Dateipicker mit `copyToCacheDirectory: true` und kopiert ausgewählte
-Dateien anschließend in `<documentDirectory>/sandbox/`. Bei Namenskollisionen
-erzeugt `importService.ts` automatisch eindeutige Namen wie `datei (1).txt`.
+**Entscheidung:** Die echte Gmail-Anbindung läuft über OAuth 2.0 mit PKCE
+(`expo-auth-session` + `expo-crypto`, Login im System-Browser via
+`expo-web-browser`) – nicht über Passwort, nicht über API-Key, ohne
+Client-Secret. Tokens (Access + Refresh) liegen ausschließlich in
+`expo-secure-store` (`services/email/tokenStore.ts`). Alle E-Mail-Zugriffe
+gehen durch die Provider-Schicht `emailService.ts` → `gmailProvider.ts` /
+`mockEmailProvider.ts` (gemeinsames Interface in `services/email/types.ts`).
+Scope: nur `https://www.googleapis.com/auth/gmail.modify`.
 
 **Warum:**
-- Der Nutzer wählt Dateien sichtbar und explizit aus; es gibt kein Agent-Tool,
-  das den Android-Speicher heimlich durchsucht.
-- Originaldateien auf dem Gerät bleiben unverändert. Der Agent arbeitet nur
-  mit Sandbox-Kopien und bleibt damit im bestehenden Sicherheitsmodell.
-- `expo-document-picker` nutzt den System-Dateipicker und braucht keine
-  "Manage All Files"-Permission oder vollständigen Dateisystemzugriff.
-- Ein späterer Export zurück in Downloads kann separat und ebenfalls
-  nutzerbestätigt entschieden werden.
+- **Kein Passwort/API-Key:** Die App sieht nie Gmail-Zugangsdaten; der Login
+  passiert auf Googles Seiten. PKCE (RFC 7636) ist der Standard-Flow für
+  installierte Apps und braucht kein Client-Secret – ein Secret im App-Code
+  wäre ohnehin extrahierbar und damit wertlos.
+- **Agent sieht nie Tokens:** Tokens verlassen `tokenStore.ts`/
+  `gmailProvider.ts` nicht. Das Provider-Interface liefert nur Mail-Daten.
+  Selbst ein manipulierter Plan (Prompt Injection) hat keinen Codepfad zu
+  Credentials.
+- **Scope-Minimierung:** `gmail.modify` deckt alle Agent-Tools ab (lesen,
+  Entwürfe, senden, archivieren, labeln). `https://mail.google.com/`
+  (Vollzugriff inkl. endgültigem Löschen) ist bewusst ausgeschlossen;
+  engere Alternativen (`gmail.readonly`, `gmail.send`) sind in
+  `src/config/googleOAuth.ts` dokumentiert.
+- **Provider-Schicht:** Tools/UI bleiben stabil, wenn Provider wechseln
+  (Mock bleibt als Fallback/Test, Outlook folgt als eigener Provider).
+
+**Neue Dependencies (Begründung gemäß Regel):** `expo-auth-session`
+(OAuth/PKCE-Flow), `expo-crypto` (PKCE-Verifier, Peer-Dependency),
+`expo-web-browser` (sicherer System-Browser-Tab für den Login). Alle drei
+sind offizielle Expo-SDK-Module, versioniert mit SDK 57.

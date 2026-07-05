@@ -125,20 +125,68 @@ Originaldateien auf dem Gerät bleiben unverändert.
   der Sandbox-Kopie.
 - Später kann ein Export zurück in Downloads ergänzt werden.
 
-## Spätere echte E-Mail-Integration
+## E-Mail-Provider-Schicht (implementiert)
 
-`services/email/emailService.ts` ist bewusst ein In-Memory-Mock **mit finaler
-Schnittstelle**. Für echte Provider:
+```
+Agent-Tool (emailTools.ts)          EmailScreen
+        │                                │
+        └────────────┬───────────────────┘
+                     ▼
+        services/email/emailService.ts     ← einziger Einstiegspunkt
+                     │  (aktiver Provider)
+        ┌────────────┴────────────┐
+        ▼                         ▼
+  providers/gmailProvider   providers/mockEmailProvider
+        │                         (In-Memory-Fallback/Test)
+        ├── auth/gmailOAuth.ts    (OAuth 2.0 + PKCE, expo-auth-session)
+        └── tokenStore.ts         (Tokens NUR in SecureStore)
+```
 
-1. Interface aus den bestehenden Funktionen extrahieren
-   (`searchEmails`, `readEmail`, `createDraft`, `sendEmail`, …).
-2. Provider-Implementierung dahinter legen (Gmail API via OAuth 2.0 / PKCE,
-   oder IMAP/SMTP über einen Backend-Proxy – reines RN kann kein IMAP).
-3. OAuth-Tokens in `expo-secure-store` speichern, nie im Klartext.
-4. Die Agent-Tools (`agent/tools/emailTools.ts`) bleiben unverändert –
-   nur der Service-Unterbau wird ausgetauscht.
-5. `send_email` bleibt `risky: true`; zusätzlich sollte der Bestätigungsdialog
-   dann Empfänger + Betreff prominent anzeigen.
+- **Interface:** `services/email/types.ts` definiert `EmailProvider`
+  (connect/disconnect/isConnected/search/read/draft/reply/send/archive/label).
+  Neue Provider (Outlook, IMAP-über-Proxy) implementieren dasselbe Interface;
+  Tools und UI bleiben unverändert.
+- **Umschalten:** `emailService.ts` hält den aktiven Provider. Beim App-Start
+  stellt `initEmailService()` Gmail wieder her, wenn Tokens existieren; sonst
+  ist der Mock aktiv. `connectGmail()`/`disconnectGmail()` wechseln explizit.
+- **Mock bleibt:** Der Mock-Provider ist bewusst erhalten – Tests ohne echte
+  Zugangsdaten und Referenz-Implementierung des Interfaces.
+
+### Gmail OAuth (PKCE)
+
+- Flow: `AuthRequest` (expo-auth-session) mit `usePKCE: true` →
+  Google-Login im System-Browser (expo-web-browser) → Authorization Code →
+  `exchangeCodeAsync` mit `code_verifier` → Access- + Refresh-Token.
+- **Kein Client-Secret** (PKCE für installierte Apps braucht keines),
+  **kein Passwort-Handling** (Login nur auf Google-Seiten), **kein API-Key**.
+- `access_type=offline` + `prompt=consent` liefern einen Refresh-Token;
+  `gmailProvider` erneuert Access-Tokens automatisch (60 s vor Ablauf sowie
+  einmaliger Retry bei HTTP 401).
+- Scope: nur `gmail.modify`. `https://mail.google.com/` (Vollzugriff inkl.
+  endgültigem Löschen) ist bewusst ausgeschlossen (docs/DECISIONS.md).
+- Client-IDs kommen aus `src/config/googleOAuth.ts` (Platzhalter, lokal
+  füllen); Redirect über das App-Scheme `androidagent` (app.json). Testen
+  erfordert einen Development Build – Expo Go kann keine eigenen Schemes.
+
+### Warum der Agent Tokens nie sieht
+
+Tokens existieren ausschließlich in `tokenStore.ts` (SecureStore) und werden
+nur innerhalb von `gmailProvider.ts` an `fetch` übergeben. Das
+`EmailProvider`-Interface gibt ausschließlich `EmailMessage`/`EmailDraft`/
+`EmailAccount`-Daten zurück – es gibt keinen Codepfad, über den ein Plan,
+ein Tool-Ergebnis oder das LLM an Tokens gelangen kann. Tool-Outputs
+enthalten nur Mail-Metadaten/-Inhalte, nie Credentials.
+
+### Sicherheits-Modi (geplant)
+
+- **Safe Mode (heute, Default):** riskante E-Mail-Aktionen (`send_email`,
+  `connect_email_account`) erfordern Einzelbestätigung im Dialog.
+- **Full Access Mode (geplant, siehe TASKS.md):** Nach bewusster Aktivierung
+  darf der Agent innerhalb *verbundener Dienste* ohne Einzelbestätigung
+  handeln (Gmail senden/archivieren/labeln). Grenzen bleiben: kein
+  Android-Systemzugriff, Sandbox-Pfadvalidierung, https-only-Browser.
+  Noch nicht implementiert – aktuell bestätigt jede riskante Aktion
+  (TODO-Anker in `toolExecutor.ts`).
 
 ## Spätere echte Browser-Integration
 

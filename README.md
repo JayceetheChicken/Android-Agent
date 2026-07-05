@@ -12,8 +12,6 @@ eingebauten Mini-Browser bedienen – **niemals** das Android-System außerhalb 
 - Riskante Aktionen (E-Mail senden, Datei löschen, externe URL öffnen, Formular abschicken,
   Konto verbinden) erfordern **immer** eine explizite Nutzerbestätigung im Dialog.
 - Alle Dateipfade werden validiert; der Agent kann die App-Sandbox nicht verlassen.
-- Gerätedateien können im Dateien-Tab explizit importiert werden: Die App kopiert
-  sie in die Sandbox, Originaldateien auf dem Handy bleiben unverändert.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Entscheidungen: [docs/DECISIONS.md](docs/DECISIONS.md) · Aufgaben: [docs/TASKS.md](docs/TASKS.md) · Handoff für KI-Tools: [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md)
 
@@ -40,20 +38,76 @@ Danach in der App unter **Settings** eintragen:
 - **Base-URL** – z. B. `https://api.openai.com/v1` (jede OpenAI-kompatible API funktioniert)
 - **Modellname** – z. B. `gpt-4o-mini`
 
-## Dateien importieren
+## Gmail einrichten (OAuth 2.0 mit PKCE)
 
-Im Tab **Dateien** gibt es den Button **Datei vom Gerät importieren**. Er öffnet
-den Android-Dateipicker (`expo-document-picker`) und kopiert die ausgewählten
-Dateien in den aktuell geöffneten Sandbox-Ordner unter
-`<documentDirectory>/sandbox/`.
+Die Gmail-Verbindung nutzt **kein Passwort und keinen API-Key**, sondern
+OAuth 2.0 mit PKCE: Der Login passiert auf Googles eigener Seite im
+System-Browser, die App erhält nur Tokens und speichert sie verschlüsselt in
+`expo-secure-store`. Es gibt **kein Client-Secret** – der PKCE-Flow für
+installierte Apps braucht keines.
 
-- Die App bearbeitet danach nur die Sandbox-Kopie.
-- Die Originaldateien auf dem Gerät bleiben unverändert.
-- Bei Namenskollisionen wird automatisch ein freier Name wie `datei (1).txt`
-  verwendet.
-- Der Agent kann importierte Dateien danach nur über seine normalen
-  Sandbox-Datei-Tools sehen, lesen, verschieben oder löschen.
-- Ein Export zurück in Downloads ist ein späteres Feature.
+### 1. Google Cloud Console konfigurieren
+
+Auf https://console.cloud.google.com:
+
+1. **Projekt anlegen** (oder bestehendes auswählen).
+2. **Gmail API aktivieren:** APIs & Services → Library → „Gmail API" → Enable.
+3. **OAuth-Zustimmungsbildschirm:** APIs & Services → OAuth consent screen →
+   User Type **External** → App-Name/E-Mail ausfüllen → unter **Test users**
+   die eigene Gmail-Adresse hinzufügen.
+   *Hinweis: Solange die App im Status „Testing" ist, können sich nur
+   Test-User anmelden und Refresh-Tokens laufen nach 7 Tagen ab – für die
+   Entwicklung ausreichend.*
+4. **Client-IDs anlegen:** APIs & Services → Credentials → Create Credentials
+   → OAuth client ID:
+   - Typ **Android** → Package name: `com.androidagent.sandbox` (aus
+     `app.json`), SHA-1 des Debug-Keys (siehe unten) → ergibt die
+     **androidClientId**
+   - optional Typ **iOS** (Bundle-ID) → **iosClientId**
+   - optional Typ **Web** → **webClientId**
+
+SHA-1 des Debug-Keystores ermitteln (nach dem ersten `npx expo run:android`
+oder mit dem Standard-Android-Debug-Key):
+
+```bash
+keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androiddebugkey -storepass android
+```
+
+### 2. Client-IDs in der App eintragen
+
+In `src/config/googleOAuth.ts`:
+
+```ts
+export const GOOGLE_OAUTH_CONFIG = {
+  webClientId: '',
+  androidClientId: '1234567890-abc123.apps.googleusercontent.com', // deine ID
+  iosClientId: '',
+};
+```
+
+Scope: Es wird nur `https://www.googleapis.com/auth/gmail.modify` angefragt
+(lesen, Entwürfe, senden, archivieren, labeln). Der Vollzugriff-Scope
+`https://mail.google.com/` wird bewusst **nicht** verwendet.
+
+### 3. Development Build starten (wichtig!)
+
+Der OAuth-Redirect nutzt das App-Scheme `androidagent` – das funktioniert
+**nicht in Expo Go** (Expo Go hat sein eigenes Scheme, Google akzeptiert
+keine `exp://`-Redirects). Zum Testen der Gmail-Verbindung daher einen
+Development Build verwenden:
+
+```bash
+npx expo run:android   # baut die App nativ (Android Studio/SDK nötig)
+```
+
+Alles andere (Chat, Agent, Datei-Sandbox, Mock-E-Mail, Browser) funktioniert
+weiterhin auch in Expo Go.
+
+### 4. In der App verbinden
+
+E-Mail-Tab → **„Gmail verbinden"** → Google-Login im Browser → fertig.
+Der Status zeigt das verbundene Konto; „Test: Inbox suchen" lädt echte
+E-Mails. **„Gmail trennen"** widerruft den Zugriff und löscht die Tokens.
 
 ## Architektur (Kurzfassung)
 
@@ -68,8 +122,8 @@ src/
     executor/        Tool-Executor + Bestätigungs-Bridge (fail closed)
   services/
     ai/              OpenAI-kompatibler Client (POST /chat/completions)
-    storage/         Settings (SecureStore/AsyncStorage), Datei-Sandbox, Datei-Import
-    email/           Mock-E-Mail-Service (echte Provider kommen später)
+    storage/         Settings (SecureStore/AsyncStorage) + Datei-Sandbox
+    email/           Provider-Schicht: Gmail (OAuth/PKCE) + Mock-Fallback
     browser/         Command-Bridge zwischen Agent und WebView
   types/             Gemeinsame TypeScript-Typen
   utils/             Pfad-Validierung, JSON-Extraktion
@@ -103,7 +157,6 @@ git push -u origin main
 
 1. Der Agent erzeugt nur JSON-Pläne, nie direkt ausgeführten Code.
 2. Riskante Tools laufen nur nach expliziter Nutzerbestätigung (`ConfirmActionModal`).
-3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung);
-   Gerätedateien werden nur als Kopie importiert.
+3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung).
 4. Keine Steuerung des Android-Systems außerhalb der App.
 5. API-Keys niemals im Code – nur verschlüsselt in `expo-secure-store`.

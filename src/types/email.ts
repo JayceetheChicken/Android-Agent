@@ -1,8 +1,9 @@
-export type EmailProvider = 'mock' | 'gmail' | 'imap';
+/** Provider kind on an account. (The provider *interface* lives in services/email/types.ts.) */
+export type EmailProviderKind = 'mock' | 'gmail' | 'imap';
 
 export interface EmailAccount {
   id: string;
-  provider: EmailProvider;
+  provider: EmailProviderKind;
   address: string;
   connected: boolean;
 }
