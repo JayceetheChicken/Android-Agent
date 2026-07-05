@@ -75,14 +75,15 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     mock: false,
   },
 
-  // ---- Email (mock service for now) ----
+  // ---- Email (runs against the active provider: Gmail via OAuth or mock) ----
   {
     name: 'connect_email_account',
     category: 'email',
-    description: 'Connect an email account (mock). Requires user confirmation.',
-    params: { address: 'string – email address to connect' },
+    description:
+      'Connect an email account. "gmail" opens the Google login (OAuth). Requires user confirmation.',
+    params: { provider: 'string – "gmail" (real account via Google login) or "mock" (test inbox)' },
     risky: true,
-    mock: true,
+    mock: false,
   },
   {
     name: 'search_emails',
@@ -90,7 +91,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description: 'Search emails by subject, sender, body or label. Empty query lists the inbox.',
     params: { query: 'string – search text, may be empty' },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'read_email',
@@ -98,7 +99,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description: 'Read the full content of one email.',
     params: { id: 'string – email id from search_emails' },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'draft_email',
@@ -110,7 +111,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       body: 'string – email body',
     },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'draft_reply',
@@ -121,7 +122,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       body: 'string – reply body',
     },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'archive_email',
@@ -129,7 +130,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description: 'Archive an email.',
     params: { id: 'string – email id' },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'label_email',
@@ -140,7 +141,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       label: 'string – label name',
     },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'send_email',
@@ -148,7 +149,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     description: 'Send a previously created draft. Requires user confirmation.',
     params: { draft_id: 'string – id of the draft to send' },
     risky: true,
-    mock: true,
+    mock: false,
   },
 
   // ---- Browser (WebView bridge; DOM interaction not implemented yet) ----
