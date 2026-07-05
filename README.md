@@ -12,6 +12,8 @@ eingebauten Mini-Browser bedienen – **niemals** das Android-System außerhalb 
 - Riskante Aktionen (E-Mail senden, Datei löschen, externe URL öffnen, Formular abschicken,
   Konto verbinden) erfordern **immer** eine explizite Nutzerbestätigung im Dialog.
 - Alle Dateipfade werden validiert; der Agent kann die App-Sandbox nicht verlassen.
+- User Memory wird lokal in der App gespeichert und ist unabhängig vom jeweils
+  ausgewählten KI-Modell.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Entscheidungen: [docs/DECISIONS.md](docs/DECISIONS.md) · Aufgaben: [docs/TASKS.md](docs/TASKS.md) · Handoff für KI-Tools: [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md)
 
@@ -37,6 +39,27 @@ Danach in der App unter **Settings** eintragen:
 - **API-Key** – wird verschlüsselt via `expo-secure-store` gespeichert
 - **Base-URL** – z. B. `https://api.openai.com/v1` (jede OpenAI-kompatible API funktioniert)
 - **Modellname** – z. B. `gpt-4o-mini`
+
+## User Memory
+
+Die App speichert eine einfache lokale **User Memory** in AsyncStorage. Diese
+Memory gehört der App, nicht OpenAI, DeepSeek oder einem lokalen Modell. Wenn
+du das Modell wechselst, kann der neue Anbieter dieselbe lokale Memory als
+Kontext nutzen.
+
+- Es gibt bewusst nur eine User Memory für `local-user` - keine Project Memory
+  und keine Session Memory.
+- Chat und Agent-Planer laden vor jedem Modellaufruf bis zu 10 relevante oder
+  sehr wichtige Memories und geben sie als zusätzlichen Kontext an das Modell.
+- Der Agent kann über `remember`, `search_memory`, `list_memory` und
+  `forget_memory` mit der Memory arbeiten; `forget_memory` ist
+  bestätigungspflichtig.
+- Im Settings-Tab kann der Nutzer Memories einsehen und einzelne oder alle
+  Memories löschen.
+- Keine Secrets speichern: keine Passwörter, API-Keys, OAuth-Tokens,
+  Bankdaten oder Kreditkartendaten.
+- Embeddings/Vektorsuche sind eine mögliche spätere Erweiterung, aber aktuell
+  nicht Teil der Implementierung.
 
 ## Gmail einrichten (OAuth 2.0 mit PKCE)
 
@@ -123,6 +146,7 @@ src/
   services/
     ai/              OpenAI-kompatibler Client (POST /chat/completions)
     storage/         Settings (SecureStore/AsyncStorage) + Datei-Sandbox
+    memory/          Lokale modellunabhängige User Memory (AsyncStorage)
     email/           Provider-Schicht: Gmail (OAuth/PKCE) + Mock-Fallback
     browser/         Command-Bridge zwischen Agent und WebView
   types/             Gemeinsame TypeScript-Typen
@@ -160,3 +184,4 @@ git push -u origin main
 3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung).
 4. Keine Steuerung des Android-Systems außerhalb der App.
 5. API-Keys niemals im Code – nur verschlüsselt in `expo-secure-store`.
+6. User Memory darf keine Secrets oder sehr sensiblen privaten Informationen enthalten.

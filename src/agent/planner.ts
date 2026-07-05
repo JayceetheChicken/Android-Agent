@@ -1,5 +1,6 @@
 import { MAX_PLAN_STEPS } from '../config/constants';
 import { chatCompletion } from '../services/ai/openaiClient';
+import { getRelevantMemoryContext } from '../services/memory/memoryService';
 import type { AgentPlan, PlanStep } from '../types/agent';
 import type { AISettings } from '../types/settings';
 import { extractJsonObject } from '../utils/json';
@@ -36,6 +37,9 @@ export function buildPlannerSystemPrompt(): string {
     '- You have NO access to the Android system, other apps, contacts or files outside the sandbox.',
     `- A plan has at most ${MAX_PLAN_STEPS} steps.`,
     '- Risky tools are shown to the user for confirmation before they run. Plan them only when necessary.',
+    '- Use local user memory when it helps answer or plan. The memory belongs to the app, not to any model provider.',
+    '- Use remember only for explicit "remember this" requests, stable user preferences, important durable project decisions, or recurring information useful later.',
+    '- Never remember passwords, API keys, OAuth tokens, banking data, credit card data, or very sensitive private information unless the user explicitly asks and it is safe to store.',
     '',
     'Available tools:',
     describeTools(),
@@ -97,9 +101,12 @@ export function parsePlan(modelResponse: string): AgentPlan {
 }
 
 export async function createPlan(settings: AISettings, userTask: string): Promise<AgentPlan> {
-  const response = await chatCompletion(settings, [
-    { role: 'system', content: buildPlannerSystemPrompt() },
-    { role: 'user', content: userTask },
-  ]);
+  const memoryContext = await getRelevantMemoryContext(userTask);
+  const messages = [
+    { role: 'system' as const, content: buildPlannerSystemPrompt() },
+    ...(memoryContext.length > 0 ? [{ role: 'system' as const, content: memoryContext }] : []),
+    { role: 'user' as const, content: userTask },
+  ];
+  const response = await chatCompletion(settings, messages);
   return parsePlan(response);
 }

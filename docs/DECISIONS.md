@@ -180,3 +180,23 @@ Scope: nur `https://www.googleapis.com/auth/gmail.modify`.
 (OAuth/PKCE-Flow), `expo-crypto` (PKCE-Verifier, Peer-Dependency),
 `expo-web-browser` (sicherer System-Browser-Tab für den Login). Alle drei
 sind offizielle Expo-SDK-Module, versioniert mit SDK 57.
+
+## 13. Eine lokale modellunabhängige User Memory (2026-07-05)
+
+**Entscheidung:** Die App bekommt genau eine User Memory für den lokalen
+Standardnutzer `local-user`. Sie liegt in AsyncStorage
+(`STORAGE_KEYS.userMemory`) und wird über `services/memory/memoryService.ts`
+verwaltet. Es gibt keine Project Memory, keine Session Memory und keine
+separate Memory pro Modellanbieter.
+
+**Warum:**
+- Die Memory gehört der App, nicht OpenAI, DeepSeek oder einem lokalen Modell.
+  Ein Modellwechsel behält dadurch denselben lokalen Kontext.
+- AsyncStorage reicht für einfache Notizen und braucht keine neue Dependency.
+- Eine einzige Memory hält das Sicherheits- und Produktmodell verständlich:
+  Nutzer können sie im Settings-Tab sehen und löschen.
+- Secrets sind ausgeschlossen: Passwörter, API-Keys, OAuth-Tokens, Bankdaten
+  und Kreditkartendaten dürfen nicht gespeichert werden.
+- Embeddings oder Vektorsuche bleiben eine spätere Erweiterung; aktuell reicht
+  einfache Text-/Tag-Suche mit Sortierung nach Relevanz, Wichtigkeit und
+  Aktualität.

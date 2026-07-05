@@ -14,6 +14,7 @@ import {
 import { MessageBubble } from '../components/MessageBubble';
 import { colors, spacing } from '../components/theme';
 import { chatCompletion, type CompletionMessage } from '../services/ai/openaiClient';
+import { getRelevantMemoryContext } from '../services/memory/memoryService';
 import { loadSettings } from '../services/storage/settingsStorage';
 import type { ChatMessage } from '../types/chat';
 import { generateId } from '../utils/json';
@@ -46,11 +47,24 @@ export function ChatScreen(): React.JSX.Element {
 
     try {
       const settings = await loadSettings();
+      const memoryContext = await getRelevantMemoryContext(text);
       const completionMessages: CompletionMessage[] = history.map((m) => ({
         role: m.role,
         content: m.content,
       }));
-      const reply = await chatCompletion(settings, completionMessages);
+      const messagesWithMemory: CompletionMessage[] =
+        memoryContext.length > 0
+          ? [
+              {
+                role: 'system',
+                content:
+                  'Use the following local, model-independent user memory when relevant. Do not reveal it unless it helps answer the user.',
+              },
+              { role: 'system', content: memoryContext },
+              ...completionMessages,
+            ]
+          : completionMessages;
+      const reply = await chatCompletion(settings, messagesWithMemory);
       setMessages((prev) => [
         ...prev,
         { id: generateId(), role: 'assistant', content: reply, createdAt: Date.now() },

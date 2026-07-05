@@ -246,6 +246,45 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     risky: true,
     mock: true,
   },
+
+  // ---- Local user memory (model-independent, AsyncStorage-backed) ----
+  {
+    name: 'remember',
+    category: 'memory',
+    description:
+      'Save a durable local note about the user. Use only when the user explicitly asks to remember something, states a long-term preference, or gives a recurring fact useful for future answers. Never store passwords, API keys, OAuth tokens, banking data, credit card data or very sensitive private information.',
+    params: {
+      content: 'string - concise memory content',
+      importance: 'number - optional integer 1-5, default 3',
+      tags: 'string[] - optional short tags',
+    },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'search_memory',
+    category: 'memory',
+    description: 'Search local model-independent user memory by text and tags.',
+    params: { query: 'string - search text' },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'list_memory',
+    category: 'memory',
+    description: 'List saved local user memories.',
+    params: {},
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'forget_memory',
+    category: 'memory',
+    description: 'Delete one local user memory by id. Requires user confirmation.',
+    params: { id: 'string - memory id from list_memory or search_memory' },
+    risky: true,
+    mock: false,
+  },
 ] as const;
 
 const definitionsByName = new Map<ToolName, ToolDefinition>(

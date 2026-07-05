@@ -5,7 +5,7 @@
 - [x] Expo-Projekt (SDK 57, TypeScript strict)
 - [x] Navigation + 6 Screens (Chat, Agent, Dateien, E-Mail, Browser, Settings)
 - [x] TypeScript-Typen für Tools, Pläne, Chat, E-Mail, Settings
-- [x] Tool-Registry mit `risky`/`mock`-Flags (25 Tools)
+- [x] Tool-Registry mit `risky`/`mock`-Flags (29 Tools)
 - [x] Tool-Executor mit Bestätigungspflicht (fail closed)
 - [x] Agent-Plan-System (LLM → JSON-Plan → Validierung → Review → Ausführung)
 - [x] Datei-Sandbox real (list/read/write/move/rename/create/delete) inkl. Pfad-Validierung
@@ -14,6 +14,8 @@
 - [x] Mock-E-Mail-Service + Screen
 - [x] Mini-Browser (WebView) + Command-Bridge (`open_url`, `go_back`)
 - [x] Settings-Screen (API-Key in SecureStore, Base-URL/Modell in AsyncStorage)
+- [x] Lokale modellunabhängige User Memory (AsyncStorage, Settings-Verwaltung,
+      Agent-Tools, Chat-/Planner-Kontext)
 - [x] ConfirmActionModal für riskante Aktionen
 - [x] Doku (README, ARCHITECTURE, CODEX_HANDOFF, TASKS, DECISIONS)
 
@@ -23,6 +25,8 @@
       WebView-JS-Injection (2026-07-05)
 - [ ] Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (plan → act → observe → replan)
 - [ ] Chat-Verlauf und Agent-Läufe persistieren (AsyncStorage)
+- [ ] Memory-Relevanz später optional mit Embeddings/Vektorsuche verbessern
+      (keine neue Dependency im aktuellen einfachen Stand)
 - [ ] Fehler-Retry im Planner (ungültiges JSON → eine Korrektur-Runde)
 - [ ] Settings: "Verbindung testen"-Button
 - [ ] Datei-Editor im Dateien-Tab (Textdatei bearbeiten, nicht nur ansehen)

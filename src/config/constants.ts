@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   /** AsyncStorage */
   baseUrl: 'ai_base_url',
   model: 'ai_model',
+  userMemory: 'user_memory',
 } as const;
 
 /** Hard limit so a single plan can never run away. */

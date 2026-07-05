@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -7,9 +8,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
 
 import { colors, spacing } from '../components/theme';
+import {
+  clearMemories,
+  deleteMemory,
+  listMemories,
+  type UserMemory,
+} from '../services/memory/memoryService';
 import { loadSettings, saveSettings } from '../services/storage/settingsStorage';
 
 /**
@@ -22,6 +30,16 @@ export function SettingsScreen(): React.JSX.Element {
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [memories, setMemories] = useState<UserMemory[]>([]);
+  const [memoryStatus, setMemoryStatus] = useState<string | null>(null);
+
+  const refreshMemories = useCallback(async () => {
+    try {
+      setMemories(await listMemories());
+    } catch (e) {
+      setMemoryStatus(`Memory-Fehler: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
 
   useEffect(() => {
     void loadSettings().then((settings) => {
@@ -29,7 +47,8 @@ export function SettingsScreen(): React.JSX.Element {
       setBaseUrl(settings.baseUrl);
       setModel(settings.model);
     });
-  }, []);
+    void refreshMemories();
+  }, [refreshMemories]);
 
   const save = useCallback(async () => {
     try {
@@ -39,6 +58,47 @@ export function SettingsScreen(): React.JSX.Element {
       setStatus(`Fehler: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [apiKey, baseUrl, model]);
+
+  const removeMemory = useCallback(
+    (memory: UserMemory) => {
+      Alert.alert('Memory löschen', 'Diese Erinnerung wirklich löschen?', [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMemory(memory.id);
+              setMemoryStatus('Memory gelöscht.');
+              await refreshMemories();
+            } catch (e) {
+              setMemoryStatus(`Memory-Fehler: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          },
+        },
+      ]);
+    },
+    [refreshMemories],
+  );
+
+  const removeAllMemories = useCallback(() => {
+    Alert.alert('Alle Memories löschen', 'Alle lokalen User Memories wirklich löschen?', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Alle löschen',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearMemories();
+            setMemoryStatus('Alle Memories gelöscht.');
+            await refreshMemories();
+          } catch (e) {
+            setMemoryStatus(`Memory-Fehler: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        },
+      },
+    ]);
+  }, [refreshMemories]);
 
   return (
     <KeyboardAvoidingView
@@ -92,6 +152,38 @@ export function SettingsScreen(): React.JSX.Element {
           <Text style={styles.saveText}>Speichern</Text>
         </Pressable>
         {status && <Text style={styles.status}>{status}</Text>}
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>User Memory</Text>
+            {memories.length > 0 && (
+              <Pressable style={styles.clearButton} onPress={removeAllMemories}>
+                <Text style={styles.clearText}>Alle löschen</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={styles.hint}>
+            Lokal gespeichert und modellunabhängig. Keine Passwörter, API-Keys oder Tokens
+            speichern.
+          </Text>
+          {memoryStatus && <Text style={styles.memoryStatus}>{memoryStatus}</Text>}
+          {memories.length === 0 ? (
+            <Text style={styles.emptyMemory}>Noch keine Memories gespeichert.</Text>
+          ) : (
+            memories.map((memory) => (
+              <View key={memory.id} style={styles.memoryCard}>
+                <Text style={styles.memoryContent}>{memory.content}</Text>
+                <Text style={styles.memoryMeta}>
+                  Wichtigkeit {memory.importance} · {memory.tags.length > 0 ? memory.tags.join(', ') : 'keine Tags'}
+                </Text>
+                <Text style={styles.memoryId}>{memory.id}</Text>
+                <Pressable style={styles.deleteButton} onPress={() => removeMemory(memory)}>
+                  <Text style={styles.deleteText}>Löschen</Text>
+                </Pressable>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -128,4 +220,36 @@ const styles = StyleSheet.create({
   },
   saveText: { color: colors.text, fontWeight: '700', fontSize: 15 },
   status: { color: colors.success, textAlign: 'center', marginTop: spacing.m },
+  section: { marginTop: spacing.xl, paddingTop: spacing.l, borderTopWidth: 1, borderTopColor: colors.border },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  clearButton: {
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+  },
+  clearText: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  memoryStatus: { color: colors.success, marginTop: spacing.s, fontSize: 13 },
+  emptyMemory: { color: colors.textMuted, marginTop: spacing.m, fontSize: 13 },
+  memoryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.m,
+    marginTop: spacing.m,
+  },
+  memoryContent: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  memoryMeta: { color: colors.textMuted, fontSize: 12, marginTop: spacing.s },
+  memoryId: { color: colors.textMuted, fontFamily: 'monospace', fontSize: 11, marginTop: spacing.xs },
+  deleteButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 8,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+    marginTop: spacing.m,
+  },
+  deleteText: { color: colors.text, fontSize: 12, fontWeight: '700' },
 });

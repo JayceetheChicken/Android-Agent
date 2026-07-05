@@ -12,7 +12,7 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 - **Tool-Executor** (`src/agent/executor/toolExecutor.ts`): führt Schritte aus,
   erzwingt Nutzerbestätigung für riskante Tools (fail closed über
   `executor/confirmation.ts` + `components/ConfirmActionModal.tsx`).
-- **Tool-Registry** (`src/agent/tools/definitions.ts`): alle 25 Tools mit
+- **Tool-Registry** (`src/agent/tools/definitions.ts`): alle 29 Tools mit
   `risky`- und `mock`-Flags. Der Planner-Prompt wird daraus generiert.
 - **Datei-Tools: echt implementiert**, sandboxed auf `<documentDirectory>/sandbox/`
   (`services/storage/sandboxFs.ts` + Pfad-Validierung in `utils/paths.ts`).
@@ -35,6 +35,11 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 - **Settings:** API-Key (SecureStore, verschlüsselt), Base-URL + Modell
   (AsyncStorage). Client: `services/ai/openaiClient.ts`
   (POST `{baseUrl}/chat/completions`, OpenAI-kompatibel).
+- **User Memory:** eine lokale, modellunabhängige User Memory in AsyncStorage
+  (`services/memory/memoryService.ts`, `DEFAULT_USER_ID = 'local-user'`).
+  Chat und Agent-Planer laden relevante Memories vor jedem Modellaufruf;
+  Tools: `remember`, `search_memory`, `list_memory`, `forget_memory`.
+  Settings zeigt und löscht Memories. Keine Secrets speichern.
 - `npm run typecheck` läuft fehlerfrei.
 
 ## Wichtige Dateien (in dieser Reihenfolge lesen)
@@ -70,8 +75,9 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
    die Browser-Tools liefern dafür bereits strukturierte `data`-Payloads.
 3. YouTube-Transcript-Spezialtool (auf read_page/Bridge aufbauend).
 4. Chat- und Agent-Verlauf persistieren (AsyncStorage).
-5. Full Access Mode (bewusst aktivierbar, nur innerhalb verbundener Dienste).
-6. Outlook/Microsoft als zweiter echter Provider (separater Meilenstein).
+5. Memory-Relevanz optional mit Embeddings/Vektorsuche verbessern.
+6. Full Access Mode (bewusst aktivierbar, nur innerhalb verbundener Dienste).
+7. Outlook/Microsoft als zweiter echter Provider (separater Meilenstein).
 
 ## Wichtig bei E-Mail-Änderungen
 

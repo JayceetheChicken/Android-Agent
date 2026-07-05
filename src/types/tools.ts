@@ -32,12 +32,15 @@ export const BROWSER_TOOL_NAMES = [
   'download_file',
 ] as const;
 
+export const MEMORY_TOOL_NAMES = ['remember', 'search_memory', 'list_memory', 'forget_memory'] as const;
+
 export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
 export type EmailToolName = (typeof EMAIL_TOOL_NAMES)[number];
 export type BrowserToolName = (typeof BROWSER_TOOL_NAMES)[number];
-export type ToolName = FileToolName | EmailToolName | BrowserToolName;
+export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number];
+export type ToolName = FileToolName | EmailToolName | BrowserToolName | MemoryToolName;
 
-export type ToolCategory = 'files' | 'email' | 'browser';
+export type ToolCategory = 'files' | 'email' | 'browser' | 'memory';
 
 /** Parameters as produced by the LLM plan – always validated inside the tool handler. */
 export type ToolParams = Record<string, unknown>;

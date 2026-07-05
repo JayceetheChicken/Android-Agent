@@ -17,6 +17,7 @@ Agent (agent/)
 Services (services/)
   ai/openaiClient   POST {baseUrl}/chat/completions
   storage/          SecureStore (API-Key), AsyncStorage (Settings), Datei-Sandbox, Import
+  memory/           Lokale modellunabhängige User Memory (AsyncStorage)
   email/            Mock-Postfach (API-kompatibel zu späterer echter Integration)
   browser/          Command-Bridge zur WebView
 ```
@@ -40,6 +41,11 @@ Beide treffen sich nur im Tool-Executor und in der Bestätigungs-Bridge.
 Zusätzlich gehört `src/services/storage/importService.ts` zur Storage-Schicht:
 Der Service öffnet den Android-Dateipicker nur durch eine UI-Aktion und kopiert
 ausgewählte Gerätedateien als neue Sandbox-Dateien.
+
+`src/services/memory/memoryService.ts` verwaltet eine einzige lokale User
+Memory für `local-user`. Sie liegt in AsyncStorage, ist unabhängig vom
+ausgewählten Modellanbieter und wird vor Chat- und Agent-Planer-Aufrufen als
+zusätzlicher Kontext geladen, wenn sie relevant ist.
 
 ## Agentic Mode
 
@@ -97,8 +103,31 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
   Speicher und Netzwerkzugriff.
 - **Secrets:** API-Key nur in `expo-secure-store` (verschlüsselter Keystore),
   nie in Code, Config, Logs oder der Datei-Sandbox.
+- **User Memory ohne Secrets:** Lokale Memories dürfen keine Passwörter,
+  API-Keys, OAuth-Tokens, Bankdaten, Kreditkartendaten oder sehr sensible
+  private Informationen enthalten. Der Nutzer kann sie im Settings-Tab sehen
+  und löschen.
 - **Browser:** nur `https:`-URLs (`validateUrl`), WebView ohne
   Multi-Window-Support.
+
+## User Memory
+
+- Speicherort: AsyncStorage unter `STORAGE_KEYS.userMemory`; Standardnutzer:
+  `DEFAULT_USER_ID = 'local-user'`.
+- Struktur: `id`, `userId`, `content`, `importance` (1-5), `tags`,
+  `createdAt`, `updatedAt`, optional `lastUsedAt`.
+- Suche: einfache Volltext- und Tag-Suche, sortiert nach Relevanz,
+  Wichtigkeit und Aktualität. Es gibt keine Embeddings und keine
+  Vektordatenbank.
+- Kontext: `getRelevantMemoryContext()` liefert maximal 10 relevante oder sehr
+  wichtige Memories als Textblock `Local user memory:`. Chat und Agent-Planer
+  hängen diesen Block als System-Kontext an den jeweiligen Modellaufruf an.
+- Tools: `remember`, `search_memory`, `list_memory`, `forget_memory`.
+  `forget_memory` ist `risky: true` und läuft über den Bestätigungsdialog.
+- UI: Settings zeigt alle Memories, Tags, Wichtigkeit und IDs; einzelne oder
+  alle Memories können gelöscht werden.
+- Später möglich: Embeddings/Vektorsuche oder bessere Relevanzbewertung. Das
+  ist bewusst nicht Teil der aktuellen einfachen Implementierung.
 
 ## Datei-Sandbox
 
