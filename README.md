@@ -12,6 +12,8 @@ eingebauten Mini-Browser bedienen – **niemals** das Android-System außerhalb 
 - Riskante Aktionen (E-Mail senden, Datei löschen, externe URL öffnen, Formular abschicken,
   Konto verbinden) erfordern **immer** eine explizite Nutzerbestätigung im Dialog.
 - Alle Dateipfade werden validiert; der Agent kann die App-Sandbox nicht verlassen.
+- Gerätedateien können im Dateien-Tab explizit importiert werden: Die App kopiert
+  sie in die Sandbox, Originaldateien auf dem Handy bleiben unverändert.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Entscheidungen: [docs/DECISIONS.md](docs/DECISIONS.md) · Aufgaben: [docs/TASKS.md](docs/TASKS.md) · Handoff für KI-Tools: [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md)
 
@@ -38,6 +40,21 @@ Danach in der App unter **Settings** eintragen:
 - **Base-URL** – z. B. `https://api.openai.com/v1` (jede OpenAI-kompatible API funktioniert)
 - **Modellname** – z. B. `gpt-4o-mini`
 
+## Dateien importieren
+
+Im Tab **Dateien** gibt es den Button **Datei vom Gerät importieren**. Er öffnet
+den Android-Dateipicker (`expo-document-picker`) und kopiert die ausgewählten
+Dateien in den aktuell geöffneten Sandbox-Ordner unter
+`<documentDirectory>/sandbox/`.
+
+- Die App bearbeitet danach nur die Sandbox-Kopie.
+- Die Originaldateien auf dem Gerät bleiben unverändert.
+- Bei Namenskollisionen wird automatisch ein freier Name wie `datei (1).txt`
+  verwendet.
+- Der Agent kann importierte Dateien danach nur über seine normalen
+  Sandbox-Datei-Tools sehen, lesen, verschieben oder löschen.
+- Ein Export zurück in Downloads ist ein späteres Feature.
+
 ## Architektur (Kurzfassung)
 
 ```
@@ -51,7 +68,7 @@ src/
     executor/        Tool-Executor + Bestätigungs-Bridge (fail closed)
   services/
     ai/              OpenAI-kompatibler Client (POST /chat/completions)
-    storage/         Settings (SecureStore/AsyncStorage) + Datei-Sandbox
+    storage/         Settings (SecureStore/AsyncStorage), Datei-Sandbox, Datei-Import
     email/           Mock-E-Mail-Service (echte Provider kommen später)
     browser/         Command-Bridge zwischen Agent und WebView
   types/             Gemeinsame TypeScript-Typen
@@ -86,6 +103,7 @@ git push -u origin main
 
 1. Der Agent erzeugt nur JSON-Pläne, nie direkt ausgeführten Code.
 2. Riskante Tools laufen nur nach expliziter Nutzerbestätigung (`ConfirmActionModal`).
-3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung).
+3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung);
+   Gerätedateien werden nur als Kopie importiert.
 4. Keine Steuerung des Android-Systems außerhalb der App.
 5. API-Keys niemals im Code – nur verschlüsselt in `expo-secure-store`.

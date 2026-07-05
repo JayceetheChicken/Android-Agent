@@ -9,6 +9,8 @@
 - [x] Tool-Executor mit Bestätigungspflicht (fail closed)
 - [x] Agent-Plan-System (LLM → JSON-Plan → Validierung → Review → Ausführung)
 - [x] Datei-Sandbox real (list/read/write/move/rename/create/delete) inkl. Pfad-Validierung
+- [x] Dateien-Tab nutzbarer: Breadcrumbs, Umbenennen, Verschieben, Import von
+      Gerätedateien als Sandbox-Kopien
 - [x] Mock-E-Mail-Service + Screen
 - [x] Mini-Browser (WebView) + Command-Bridge (`open_url`, `go_back`)
 - [x] Settings-Screen (API-Key in SecureStore, Base-URL/Modell in AsyncStorage)
@@ -23,6 +25,8 @@
 - [ ] Fehler-Retry im Planner (ungültiges JSON → eine Korrektur-Runde)
 - [ ] Settings: "Verbindung testen"-Button
 - [ ] Datei-Editor im Dateien-Tab (Textdatei bearbeiten, nicht nur ansehen)
+- [ ] Safe Mode / Full Access Mode für `write_file`: Überschreiben bestehender
+      Dateien je nach Modus bestätigen oder erlauben
 
 ## Meilenstein 3 – Browser-Agent
 
@@ -43,5 +47,6 @@
 - [ ] Mehrere Agent-Profile (unterschiedliche System-Prompts)
 - [ ] Audit-Log: alle ausgeführten Tools mit Zeitstempel in der Sandbox protokollieren
 - [ ] Export/Import der Sandbox als ZIP
+- [ ] Export einzelner Sandbox-Dateien zurück in Downloads
 - [ ] Streaming-Antworten im Chat
 - [ ] Unit-Tests für `sanitizeSandboxPath` und `parsePlan` (Jest einführen)

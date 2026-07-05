@@ -27,8 +27,14 @@ export const fileToolHandlers: Record<FileToolName, ToolHandler> = {
   write_file: async (params) => {
     const path = requireString(params, 'path');
     const content = optionalString(params, 'content');
+    const existed = await sandboxFs.existsInSandbox(path);
+    // TODO Safe Mode: overwriting existing files needs confirmation.
+    // TODO Full Access Mode: overwriting existing files is allowed.
     await sandboxFs.writeTextFile(path, content);
-    return { ok: true, output: `Wrote ${content.length} characters to "${path}".` };
+    return {
+      ok: true,
+      output: `${existed ? 'Overwrote existing file' : 'Wrote'} ${content.length} characters to "${path}".`,
+    };
   },
 
   move_file: async (params) => {

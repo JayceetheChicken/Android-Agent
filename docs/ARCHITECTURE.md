@@ -16,7 +16,7 @@ Agent (agent/)
         ▼
 Services (services/)
   ai/openaiClient   POST {baseUrl}/chat/completions
-  storage/          SecureStore (API-Key), AsyncStorage (Settings), Datei-Sandbox
+  storage/          SecureStore (API-Key), AsyncStorage (Settings), Datei-Sandbox, Import
   email/            Mock-Postfach (API-kompatibel zu späterer echter Integration)
   browser/          Command-Bridge zur WebView
 ```
@@ -36,6 +36,10 @@ Beide treffen sich nur im Tool-Executor und in der Bestätigungs-Bridge.
 | `src/types/*` | Alle geteilten Typen; `types/tools.ts` definiert die Tool-Namen als Const-Arrays |
 | `src/config/constants.ts` | Konstanten und Limits – **niemals Secrets** |
 | `src/utils/paths.ts` | `sanitizeSandboxPath()` – zentrale Pfad-Validierung |
+
+Zusätzlich gehört `src/services/storage/importService.ts` zur Storage-Schicht:
+Der Service öffnet den Android-Dateipicker nur durch eine UI-Aktion und kopiert
+ausgewählte Gerätedateien als neue Sandbox-Dateien.
 
 ## Agentic Mode
 
@@ -98,6 +102,12 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
 
 ## Datei-Sandbox
 
+Gerätedateien werden nie direkt bearbeitet. Der Dateien-Tab ruft
+`importService.importDeviceFiles()` auf, das `expo-document-picker` mit
+`getDocumentAsync({ copyToCacheDirectory: true, multiple: true })` nutzt und
+die ausgewählten Dateien in den aktuellen Sandbox-Ordner kopiert.
+Originaldateien auf dem Gerät bleiben unverändert.
+
 - Wurzel: `<documentDirectory>/sandbox/` (privater App-Speicher, wird beim
   ersten Zugriff angelegt).
 - API: `listEntries`, `readTextFile`, `writeTextFile`, `createFolder`,
@@ -105,6 +115,15 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
   `services/storage/sandboxFs.ts`, alles nach Pfad-Validierung.
 - Der Dateien-Tab und die Agent-Datei-Tools nutzen exakt dieselbe API, der
   Nutzer sieht also sofort, was der Agent getan hat.
+- `sandboxFs.ts` stellt dafür zusätzlich `existsInSandbox()` und
+  `copyExternalFileIntoSandbox()` bereit; Zielpfade laufen weiter durch
+  `sanitizeSandboxPath()`.
+- Bei Namenskollisionen wählt `importService.ts` automatisch einen freien Namen
+  wie `datei (1).txt` statt zu überschreiben.
+- Der Agent bekommt kein Tool, um den Android-Speicher zu durchsuchen oder den
+  Picker automatisch zu öffnen. Nach dem Import arbeitet er ausschließlich mit
+  der Sandbox-Kopie.
+- Später kann ein Export zurück in Downloads ergänzt werden.
 
 ## Spätere echte E-Mail-Integration
 

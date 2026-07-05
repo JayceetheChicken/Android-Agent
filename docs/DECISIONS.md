@@ -143,3 +143,21 @@ oder unvollständig aktualisierte Expo-Go-Installation auf dem Testgerät.
 installierte Expo-Go-Version auf dem Gerät prüfen (App → Profil), statt das
 Projekt-SDK zu verändern. Passende APKs pro SDK-Version gibt es direkt unter
 https://expo.dev/go, unabhängig vom Play-Store-Rollout.
+
+## 12. Gerätedateien nur per UI-Aktion importieren (2026-07-05)
+
+**Entscheidung:** `expo-document-picker` wurde als SDK-57-kompatible Dependency
+ergänzt (`expo-document-picker@~57.0.0`). Der Dateien-Tab nutzt den
+Android-Dateipicker mit `copyToCacheDirectory: true` und kopiert ausgewählte
+Dateien anschließend in `<documentDirectory>/sandbox/`. Bei Namenskollisionen
+erzeugt `importService.ts` automatisch eindeutige Namen wie `datei (1).txt`.
+
+**Warum:**
+- Der Nutzer wählt Dateien sichtbar und explizit aus; es gibt kein Agent-Tool,
+  das den Android-Speicher heimlich durchsucht.
+- Originaldateien auf dem Gerät bleiben unverändert. Der Agent arbeitet nur
+  mit Sandbox-Kopien und bleibt damit im bestehenden Sicherheitsmodell.
+- `expo-document-picker` nutzt den System-Dateipicker und braucht keine
+  "Manage All Files"-Permission oder vollständigen Dateisystemzugriff.
+- Ein späterer Export zurück in Downloads kann separat und ebenfalls
+  nutzerbestätigt entschieden werden.

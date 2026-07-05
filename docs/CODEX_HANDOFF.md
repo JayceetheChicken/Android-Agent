@@ -16,6 +16,9 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
   `risky`- und `mock`-Flags. Der Planner-Prompt wird daraus generiert.
 - **Datei-Tools: echt implementiert**, sandboxed auf `<documentDirectory>/sandbox/`
   (`services/storage/sandboxFs.ts` + Pfad-Validierung in `utils/paths.ts`).
+- **Dateien-Tab verbessert:** Breadcrumb-Navigation, Erstellen, Lesen,
+  Umbenennen, Verschieben, Löschen mit Bestätigung und UI-gesteuerter Import
+  von Gerätedateien via `services/storage/importService.ts`.
 - **E-Mail-Tools: Mock** (`services/email/emailService.ts`, In-Memory-Postfach).
 - **Browser-Tools: teilweise** – `open_url`/`go_back` steuern die echte WebView
   über `services/browser/browserService.ts`; DOM-Tools sind Stubs, die
@@ -34,6 +37,10 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 5. `src/screens/AgentScreen.tsx` – UI-Fluss Plan → Review → Ausführung
 6. `docs/TASKS.md` – was als Nächstes ansteht
 
+Zusätzlich wichtig für Datei-Arbeiten: `src/screens/FilesScreen.tsx`,
+`src/services/storage/sandboxFs.ts` und
+`src/services/storage/importService.ts`.
+
 ## Wie weiterarbeiten
 
 - Konventionen: TypeScript strict, keine neuen Dependencies ohne Eintrag in
@@ -44,6 +51,8 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
   (Record über die Tool-Namen), der Planner-Prompt aktualisiert sich selbst.
 - Mock durch echte Implementierung ersetzen = nur den Service unter
   `src/services/` umbauen; Tool-Handler und UI bleiben stabil.
+- Gerätedatei-Import bleibt UI-gesteuert: kein Agent-Tool einbauen, das
+  Android-Speicher heimlich durchsucht oder den Picker automatisch öffnet.
 - Vor jedem Commit: `npm run typecheck`.
 - Jede Architekturentscheidung in `docs/DECISIONS.md` dokumentieren,
   erledigte Aufgaben in `docs/TASKS.md` abhaken.
@@ -55,6 +64,7 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 3. Chat- und Agent-Verlauf persistieren (AsyncStorage).
 4. `download_file` mit `File.downloadFileAsync` in die Sandbox.
 5. Echte E-Mail-Anbindung (OAuth/PKCE, Tokens in SecureStore).
+6. Export von Sandbox-Dateien zurück in Downloads.
 
 ## Sicherheitsregeln – dürfen NIE gebrochen werden
 
@@ -66,6 +76,8 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 3. **Fail closed:** Ohne registrierten Bestätigungs-Handler wird abgelehnt.
 4. **Sandbox-Grenze:** Jeder Dateipfad geht durch `sanitizeSandboxPath()`.
    Keine Dateizugriffe an `services/storage/sandboxFs.ts` vorbei.
+   Importierte Gerätedateien sind Kopien in der Sandbox; Originale bleiben
+   unverändert.
 5. **Keine Android-Systemsteuerung:** keine Accessibility-Services, keine
    Intents in fremde Apps, keine zusätzlichen Permissions ohne Nutzer-Diskussion.
 6. **Secrets:** API-Keys/Tokens nur in `expo-secure-store`. Nie hardcoden,

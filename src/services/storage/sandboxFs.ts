@@ -64,6 +64,20 @@ export async function readTextFile(relativePath: string): Promise<string> {
   return file.text();
 }
 
+export async function existsInSandbox(relativePath: string): Promise<boolean> {
+  const sanitized = sanitizeSandboxPath(relativePath);
+  if (sanitized.length === 0) {
+    return sandboxRoot().exists;
+  }
+
+  const file = resolveFile(sanitized);
+  if (file.exists) {
+    return true;
+  }
+
+  return resolveDirectory(sanitized).exists;
+}
+
 export async function writeTextFile(relativePath: string, content: string): Promise<void> {
   const file = resolveFile(relativePath);
   if (!file.parentDirectory.exists) {
@@ -73,6 +87,22 @@ export async function writeTextFile(relativePath: string, content: string): Prom
     file.create();
   }
   file.write(content);
+}
+
+export async function copyExternalFileIntoSandbox(
+  sourceUri: string,
+  targetPath: string,
+): Promise<void> {
+  const target = resolveFile(targetPath);
+  if (await existsInSandbox(targetPath)) {
+    throw new Error(`Destination already exists: "${targetPath}"`);
+  }
+  if (!target.parentDirectory.exists) {
+    target.parentDirectory.create({ intermediates: true });
+  }
+
+  const source = new File(sourceUri);
+  await source.copy(target, { overwrite: false });
 }
 
 export async function createFolder(relativePath: string): Promise<void> {
