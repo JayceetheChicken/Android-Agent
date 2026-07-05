@@ -16,6 +16,8 @@
 - [x] Settings-Screen (API-Key in SecureStore, Base-URL/Modell in AsyncStorage)
 - [x] Lokale modellunabhängige User Memory (AsyncStorage, Settings-Verwaltung,
       Agent-Tools, Chat-/Planner-Kontext)
+- [x] Memory V2: Chat speichert explizite Merk-Anweisungen lokal,
+      Dedupe/Merge per Token-Ähnlichkeit, besseres Scoring ohne Embeddings
 - [x] ConfirmActionModal für riskante Aktionen
 - [x] Doku (README, ARCHITECTURE, CODEX_HANDOFF, TASKS, DECISIONS)
 

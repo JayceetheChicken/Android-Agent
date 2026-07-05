@@ -14,7 +14,8 @@ import {
 import { MessageBubble } from '../components/MessageBubble';
 import { colors, spacing } from '../components/theme';
 import { chatCompletion, type CompletionMessage } from '../services/ai/openaiClient';
-import { getRelevantMemoryContext } from '../services/memory/memoryService';
+import { parseRememberIntent } from '../services/memory/memoryIntent';
+import { addMemoryWithMerge, getRelevantMemoryContext } from '../services/memory/memoryService';
 import { loadSettings } from '../services/storage/settingsStorage';
 import type { ChatMessage } from '../types/chat';
 import { generateId } from '../utils/json';
@@ -46,9 +47,34 @@ export function ChatScreen(): React.JSX.Element {
     setMessages(history);
 
     try {
+      const memoryIntent = parseRememberIntent(text);
+      let modelInput = text;
+
+      if (memoryIntent.shouldRemember && memoryIntent.content) {
+        const result = await addMemoryWithMerge({
+          content: memoryIntent.content,
+          importance: memoryIntent.importance,
+          tags: memoryIntent.tags,
+        });
+        const confirmation: ChatMessage = {
+          id: generateId(),
+          role: 'assistant',
+          content: result.merged
+            ? 'Diese Info hatte ich schon ähnlich gespeichert und habe sie aktualisiert.'
+            : `Gemerkte Info gespeichert: "${result.memory.content}"`,
+          createdAt: Date.now(),
+        };
+        setMessages((prev) => [...prev, confirmation]);
+        modelInput = memoryIntent.remainingText ?? '';
+        if (modelInput.length === 0) {
+          return;
+        }
+      }
+
       const settings = await loadSettings();
-      const memoryContext = await getRelevantMemoryContext(text);
-      const completionMessages: CompletionMessage[] = history.map((m) => ({
+      const memoryContext = await getRelevantMemoryContext(modelInput);
+      const modelHistory = modelInput === text ? history : [...messages, { ...userMessage, content: modelInput }];
+      const completionMessages: CompletionMessage[] = modelHistory.map((m) => ({
         role: m.role,
         content: m.content,
       }));

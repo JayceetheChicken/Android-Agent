@@ -33,15 +33,17 @@ function formatMemory(memory: memoryService.UserMemory): string {
 export const memoryToolHandlers: Record<MemoryToolName, ToolHandler> = {
   remember: async (params) => {
     const content = requireString(params, 'content');
-    const memory = await memoryService.addMemory({
+    const result = await memoryService.addMemoryWithMerge({
       content,
       importance: optionalImportance(params),
       tags: optionalStringArray(params, 'tags'),
     });
     return {
       ok: true,
-      output: `Saved memory "${memory.id}".`,
-      data: memory,
+      output: result.merged
+        ? `Updated existing similar memory "${result.memory.id}".`
+        : `Saved memory "${result.memory.id}".`,
+      data: result.memory,
     };
   },
 

@@ -51,6 +51,13 @@ Kontext nutzen.
   und keine Session Memory.
 - Chat und Agent-Planer laden vor jedem Modellaufruf bis zu 10 relevante oder
   sehr wichtige Memories und geben sie als zusätzlichen Kontext an das Modell.
+- Der normale Chat erkennt klare lokale Merk-Anweisungen wie `merk dir ...`,
+  `bitte merk dir: ...` oder `remember this: ...` und speichert sie ohne
+  Agent-Tool-Ausführung.
+- Fast identische Memories werden per lokaler Token-Ähnlichkeit erkannt und
+  zusammengeführt statt doppelt gespeichert.
+- Die Relevanzsuche nutzt weiterhin keine Embeddings, bewertet aber Phrase,
+  Token-Overlap, Tags, Wichtigkeit, Aktualität und `lastUsedAt`.
 - Der Agent kann über `remember`, `search_memory`, `list_memory` und
   `forget_memory` mit der Memory arbeiten; `forget_memory` ist
   bestätigungspflichtig.

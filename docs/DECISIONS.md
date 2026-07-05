@@ -200,3 +200,20 @@ separate Memory pro Modellanbieter.
 - Embeddings oder Vektorsuche bleiben eine spätere Erweiterung; aktuell reicht
   einfache Text-/Tag-Suche mit Sortierung nach Relevanz, Wichtigkeit und
   Aktualität.
+
+## 14. Chat-Memory bleibt lokal-deterministisch statt Tool-Ausführung (2026-07-05)
+
+**Entscheidung:** Der normale Chat bekommt nicht den Agent-Tool-Executor.
+Stattdessen erkennt `memoryIntent.ts` nur ausdrückliche Merk-/Speicher-
+Formulierungen lokal per Regex und ruft dann `addMemoryWithMerge()` auf.
+Fast identische Memories werden per Token-Jaccard-Ähnlichkeit ab `0.85`
+zusammengeführt. Die Relevanzsuche bleibt ohne Embeddings und kombiniert
+Phrase, Token-Overlap, Tags, Wichtigkeit, Aktualität und `lastUsedAt`.
+
+**Warum:**
+- Chat bleibt ein einfacher Chat ohne Tool-Ausführungsfläche.
+- Nur klare Nutzerabsicht speichert Memory; normale Aussagen werden nicht
+  automatisch persistiert.
+- Dedupe verhindert Memory-Spam ohne neue Dependency oder Vektordatenbank.
+- Embeddings/Vektorsuche bleiben eine spätere, bewusst zu entscheidende
+  Erweiterung.

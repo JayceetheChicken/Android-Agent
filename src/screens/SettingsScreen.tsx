@@ -20,6 +20,13 @@ import {
 } from '../services/memory/memoryService';
 import { loadSettings, saveSettings } from '../services/storage/settingsStorage';
 
+function formatMemoryDate(value?: string): string {
+  if (!value) {
+    return 'nie';
+  }
+  return value.slice(0, 10);
+}
+
 /**
  * Settings for the OpenAI-compatible API.
  * The API key is stored encrypted via expo-secure-store and never leaves the
@@ -175,6 +182,10 @@ export function SettingsScreen(): React.JSX.Element {
                 <Text style={styles.memoryContent}>{memory.content}</Text>
                 <Text style={styles.memoryMeta}>
                   Wichtigkeit {memory.importance} · {memory.tags.length > 0 ? memory.tags.join(', ') : 'keine Tags'}
+                </Text>
+                <Text style={styles.memoryMeta}>
+                  Aktualisiert {formatMemoryDate(memory.updatedAt)} · genutzt{' '}
+                  {formatMemoryDate(memory.lastUsedAt)}
                 </Text>
                 <Text style={styles.memoryId}>{memory.id}</Text>
                 <Pressable style={styles.deleteButton} onPress={() => removeMemory(memory)}>

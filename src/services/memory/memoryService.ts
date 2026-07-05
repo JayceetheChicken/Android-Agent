@@ -5,6 +5,49 @@ import { generateId } from '../../utils/json';
 import { DEFAULT_USER_ID, type MemoryImportance, type UserMemory } from './types';
 
 const MAX_CONTEXT_MEMORIES = 10;
+const MERGE_SIMILARITY_THRESHOLD = 0.85;
+const STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'but',
+  'by',
+  'for',
+  'from',
+  'i',
+  'in',
+  'is',
+  'it',
+  'my',
+  'of',
+  'on',
+  'or',
+  'that',
+  'the',
+  'this',
+  'to',
+  'with',
+  'ich',
+  'das',
+  'dass',
+  'der',
+  'die',
+  'du',
+  'ein',
+  'eine',
+  'einen',
+  'fuer',
+  'für',
+  'im',
+  'ist',
+  'mag',
+  'mit',
+  'und',
+]);
 const SENSITIVE_PATTERNS = [
   /\bpassword\b/i,
   /\bpasswort\b/i,
@@ -16,6 +59,18 @@ const SENSITIVE_PATTERNS = [
   /\bkreditkarte\b/i,
   /\bbankdaten\b/i,
 ];
+
+export interface AddMemoryInput {
+  userId?: string;
+  content: string;
+  importance?: MemoryImportance;
+  tags?: string[];
+}
+
+export interface AddMemoryResult {
+  memory: UserMemory;
+  merged: boolean;
+}
 
 function normalizeUserId(userId?: string): string {
   const trimmed = userId?.trim();
@@ -40,6 +95,10 @@ function normalizeTags(tags?: string[]): string[] {
     }
   }
   return normalized;
+}
+
+function mergeTags(a: string[], b: string[]): string[] {
+  return normalizeTags([...a, ...b]);
 }
 
 function assertMemoryContentAllowed(content: string): void {
@@ -80,24 +139,71 @@ function tokenize(input: string): string[] {
     .filter((part) => part.length >= 2);
 }
 
-function scoreMemory(memory: UserMemory, terms: string[]): number {
-  if (terms.length === 0) {
-    return memory.importance >= 4 ? memory.importance : 0;
+function normalizedTokens(input: string): string[] {
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const token of tokenize(input)) {
+    if (!STOP_WORDS.has(token) && !seen.has(token)) {
+      seen.add(token);
+      tokens.push(token);
+    }
   }
+  return tokens;
+}
+
+export function similarity(a: string, b: string): number {
+  const aTokens = normalizedTokens(a);
+  const bTokens = normalizedTokens(b);
+  if (aTokens.length === 0 || bTokens.length === 0) {
+    return a.trim().toLowerCase() === b.trim().toLowerCase() ? 1 : 0;
+  }
+  const bSet = new Set(bTokens);
+  const intersection = aTokens.filter((token) => bSet.has(token)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function daysSince(date?: string): number | null {
+  if (!date) {
+    return null;
+  }
+  const time = new Date(date).getTime();
+  if (!Number.isFinite(time)) {
+    return null;
+  }
+  return Math.max(0, (Date.now() - time) / 86_400_000);
+}
+
+function recencyBoost(memory: UserMemory): number {
+  const updatedDays = daysSince(memory.updatedAt);
+  const usedDays = daysSince(memory.lastUsedAt);
+  const updatedBoost = updatedDays === null ? 0 : Math.max(0, 2 - updatedDays / 30);
+  const usedBoost = usedDays === null ? 0 : Math.max(0, 1.5 - usedDays / 14);
+  return updatedBoost + usedBoost;
+}
+
+function scoreMemory(memory: UserMemory, query: string, terms: string[]): number {
+  if (terms.length === 0) {
+    return memory.importance >= 4 ? memory.importance * 2 + recencyBoost(memory) : 0;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
   const content = memory.content.toLowerCase();
   const tags = memory.tags.map((tag) => tag.toLowerCase());
-  let score = memory.importance >= 4 ? 2 : 0;
+  const memoryTermSet = new Set(normalizedTokens(memory.content));
+  const matchingTerms = terms.filter((term) => memoryTermSet.has(term) || content.includes(term));
+  const tokenOverlap = matchingTerms.length / Math.max(terms.length, 1);
+  const tagHits = terms.filter((term) => tags.some((tag) => tag.includes(term))).length;
+  const phraseMatch = normalizedQuery.length >= 4 && content.includes(normalizedQuery) ? 1 : 0;
 
-  for (const term of terms) {
-    if (content.includes(term)) {
-      score += 2;
-    }
-    if (tags.some((tag) => tag.includes(term))) {
-      score += 3;
-    }
-  }
-
-  return score;
+  return (
+    phraseMatch * 12 +
+    tokenOverlap * 8 +
+    tagHits * 4 +
+    memory.importance * 1.5 +
+    recencyBoost(memory) +
+    (memory.importance >= 4 ? 2 : 0)
+  );
 }
 
 async function touchMemories(ids: string[]): Promise<void> {
@@ -112,12 +218,7 @@ async function touchMemories(ids: string[]): Promise<void> {
   );
 }
 
-export async function addMemory(input: {
-  userId?: string;
-  content: string;
-  importance?: MemoryImportance;
-  tags?: string[];
-}): Promise<UserMemory> {
+export async function addMemoryWithMerge(input: AddMemoryInput): Promise<AddMemoryResult> {
   const content = input.content.trim();
   if (content.length === 0) {
     throw new Error('Memory content must not be empty.');
@@ -125,19 +226,45 @@ export async function addMemory(input: {
   assertMemoryContentAllowed(content);
 
   const now = new Date().toISOString();
+  const userId = normalizeUserId(input.userId);
+  const importance = normalizeImportance(input.importance);
+  const tags = normalizeTags(input.tags);
+  const memories = await loadAll();
+  const existingIndex = memories.findIndex(
+    (memory) =>
+      memory.userId === userId && similarity(memory.content, content) >= MERGE_SIMILARITY_THRESHOLD,
+  );
+
+  if (existingIndex !== -1) {
+    const existing = memories[existingIndex];
+    const updated: UserMemory = {
+      ...existing,
+      content: content.length > existing.content.length ? content : existing.content,
+      importance: importance > existing.importance ? importance : existing.importance,
+      tags: mergeTags(existing.tags, tags),
+      updatedAt: now,
+    };
+    memories[existingIndex] = updated;
+    await saveAll(memories);
+    return { memory: updated, merged: true };
+  }
+
   const memory: UserMemory = {
     id: generateId(),
-    userId: normalizeUserId(input.userId),
+    userId,
     content,
-    importance: normalizeImportance(input.importance),
-    tags: normalizeTags(input.tags),
+    importance,
+    tags,
     createdAt: now,
     updatedAt: now,
   };
 
-  const memories = await loadAll();
   await saveAll([memory, ...memories]);
-  return memory;
+  return { memory, merged: false };
+}
+
+export async function addMemory(input: AddMemoryInput): Promise<UserMemory> {
+  return (await addMemoryWithMerge(input)).memory;
 }
 
 export async function listMemories(userId?: string): Promise<UserMemory[]> {
@@ -149,11 +276,11 @@ export async function listMemories(userId?: string): Promise<UserMemory[]> {
 
 export async function searchMemories(query: string, userId?: string): Promise<UserMemory[]> {
   const normalizedUserId = normalizeUserId(userId);
-  const terms = tokenize(query);
+  const terms = normalizedTokens(query);
   const scored = (await loadAll())
     .filter((memory) => memory.userId === normalizedUserId)
-    .map((memory) => ({ memory, score: scoreMemory(memory, terms) }))
-    .filter((item) => item.score > 0);
+    .map((memory) => ({ memory, score: scoreMemory(memory, query, terms) }))
+    .filter((item) => item.score >= 3);
 
   return scored
     .sort((a, b) => b.score - a.score || compareMemories(a.memory, b.memory))

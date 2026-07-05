@@ -46,6 +46,9 @@ ausgewählte Gerätedateien als neue Sandbox-Dateien.
 Memory für `local-user`. Sie liegt in AsyncStorage, ist unabhängig vom
 ausgewählten Modellanbieter und wird vor Chat- und Agent-Planer-Aufrufen als
 zusätzlicher Kontext geladen, wenn sie relevant ist.
+`src/services/memory/memoryIntent.ts` erkennt im normalen Chat nur explizite
+Merk-/Speicher-Formulierungen lokal und deterministisch; der Chat bekommt
+dadurch nicht das komplette Agent-Tool-System.
 
 ## Agentic Mode
 
@@ -116,9 +119,17 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
   `DEFAULT_USER_ID = 'local-user'`.
 - Struktur: `id`, `userId`, `content`, `importance` (1-5), `tags`,
   `createdAt`, `updatedAt`, optional `lastUsedAt`.
-- Suche: einfache Volltext- und Tag-Suche, sortiert nach Relevanz,
-  Wichtigkeit und Aktualität. Es gibt keine Embeddings und keine
-  Vektordatenbank.
+- Chat-Speichern: `parseRememberIntent()` akzeptiert klare Formulierungen wie
+  `merk dir ...`, `speichere ...`, `remember this ...` und extrahiert den
+  zu speichernden Inhalt. Reine Memory-Anweisungen sparen den Modellaufruf;
+  gemischte Nachrichten speichern zuerst und schicken nur die verbleibende
+  Frage/Aufgabe ans Modell.
+- Dedupe/Merge: `addMemoryWithMerge()` berechnet lokale Token-Jaccard-
+  Ähnlichkeit nach Normalisierung. Ab `0.85` wird die bestehende Memory
+  aktualisiert: `updatedAt`, höhere Wichtigkeit und zusammengeführte Tags.
+- Suche: Volltext- und Tag-Suche mit Scoring für exakte Phrase,
+  Token-Overlap, Tag-Treffer, Wichtigkeit, Aktualität und `lastUsedAt`. Es
+  gibt keine Embeddings und keine Vektordatenbank.
 - Kontext: `getRelevantMemoryContext()` liefert maximal 10 relevante oder sehr
   wichtige Memories als Textblock `Local user memory:`. Chat und Agent-Planer
   hängen diesen Block als System-Kontext an den jeweiligen Modellaufruf an.
