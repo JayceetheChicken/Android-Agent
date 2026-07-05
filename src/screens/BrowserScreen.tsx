@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { WebView, type WebViewNavigation } from 'react-native-webview';
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+} from 'react-native-webview';
 
 import { colors, spacing } from '../components/theme';
 import { BROWSER_HOME_URL } from '../config/constants';
@@ -8,8 +12,8 @@ import * as browserService from '../services/browser/browserService';
 
 /**
  * Mini browser (WebView). The agent controls it indirectly through
- * browserService commands; this screen is the only WebView owner.
- * Only https URLs are loaded (validateUrl).
+ * browserService commands and the script bridge; this screen is the only
+ * WebView owner – agent code never gets the ref. Only https URLs load.
  */
 export function BrowserScreen(): React.JSX.Element {
   const webViewRef = useRef<WebView>(null);
@@ -29,6 +33,18 @@ export function BrowserScreen(): React.JSX.Element {
         webViewRef.current?.goBack();
       }
     });
+  }, []);
+
+  // Script bridge: browserService builds the scripts, we only inject them.
+  useEffect(() => {
+    browserService.setScriptRunner((script) => {
+      webViewRef.current?.injectJavaScript(script);
+    });
+    return () => browserService.setScriptRunner(null);
+  }, []);
+
+  const onMessage = useCallback((event: WebViewMessageEvent) => {
+    browserService.handleBridgeMessage(event.nativeEvent.data);
   }, []);
 
   const go = useCallback(() => {
@@ -87,6 +103,9 @@ export function BrowserScreen(): React.JSX.Element {
         source={{ uri: currentUrl }}
         style={styles.webview}
         onNavigationStateChange={onNavigationStateChange}
+        onMessage={onMessage}
+        javaScriptEnabled
+        domStorageEnabled
         setSupportMultipleWindows={false}
       />
     </View>

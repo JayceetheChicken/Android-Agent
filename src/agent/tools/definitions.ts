@@ -152,7 +152,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     mock: false,
   },
 
-  // ---- Browser (WebView bridge; DOM interaction not implemented yet) ----
+  // ---- Browser (in-app WebView, controlled via the script bridge) ----
   {
     name: 'open_url',
     category: 'browser',
@@ -165,38 +165,58 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   {
     name: 'read_page',
     category: 'browser',
-    description: 'Read basic info (URL, title) about the currently open page.',
+    description:
+      'Read the current page: URL, title, visible text (capped), headings, links, buttons and input fields. Use this after open_url/click/submit to see where you are.',
     params: {},
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'click_element',
     category: 'browser',
-    description: 'Click an element on the current page. NOT IMPLEMENTED YET.',
-    params: { selector: 'string – CSS selector or visible text' },
+    description:
+      'Click a link/button/element on the current page. Tries the CSS selector first, then matches visible text.',
+    params: { selector: 'string – CSS selector, or the visible text of the element' },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'type_text',
     category: 'browser',
-    description: 'Type text into an input field on the current page. NOT IMPLEMENTED YET.',
+    description:
+      'Type text into an input, textarea or contenteditable (fires input/change events). Refuses password fields.',
     params: {
       selector: 'string – CSS selector of the input',
       text: 'string – text to type',
     },
     risky: false,
-    mock: true,
+    mock: false,
   },
   {
     name: 'submit_form',
     category: 'browser',
     description:
-      'Submit a form on the current page. Requires user confirmation. NOT IMPLEMENTED YET.',
-    params: { selector: 'string – CSS selector of the form' },
+      'Submit a form on the current page (falls back to Enter on the focused input). Requires user confirmation.',
+    params: { selector: 'string – CSS selector of the form or an element inside it; may be empty' },
     risky: true,
-    mock: true,
+    mock: false,
+  },
+  {
+    name: 'scroll_page',
+    category: 'browser',
+    description: 'Scroll the page roughly one screen up or down.',
+    params: { direction: 'string – "up" or "down"' },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'wait_for_page',
+    category: 'browser',
+    description:
+      'Wait briefly so a page can finish loading dynamic content, then report its ready state.',
+    params: { ms: 'number – optional wait in milliseconds (100–10000, default 1500)' },
+    risky: false,
+    mock: false,
   },
   {
     name: 'go_back',

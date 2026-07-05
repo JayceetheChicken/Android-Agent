@@ -5,7 +5,7 @@
 - [x] Expo-Projekt (SDK 57, TypeScript strict)
 - [x] Navigation + 6 Screens (Chat, Agent, Dateien, E-Mail, Browser, Settings)
 - [x] TypeScript-Typen für Tools, Pläne, Chat, E-Mail, Settings
-- [x] Tool-Registry mit `risky`/`mock`-Flags (23 Tools)
+- [x] Tool-Registry mit `risky`/`mock`-Flags (25 Tools)
 - [x] Tool-Executor mit Bestätigungspflicht (fail closed)
 - [x] Agent-Plan-System (LLM → JSON-Plan → Validierung → Review → Ausführung)
 - [x] Datei-Sandbox real (list/read/write/move/rename/create/delete) inkl. Pfad-Validierung
@@ -19,7 +19,8 @@
 
 ## Meilenstein 2 – Agent nutzbar machen
 
-- [ ] `read_page` echt: Text der aktuellen Seite per WebView-JS-Injection extrahieren
+- [x] `read_page` echt: sichtbarer Text, Headings, Links, Buttons, Inputs per
+      WebView-JS-Injection (2026-07-05)
 - [ ] Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (plan → act → observe → replan)
 - [ ] Chat-Verlauf und Agent-Läufe persistieren (AsyncStorage)
 - [ ] Fehler-Retry im Planner (ungültiges JSON → eine Korrektur-Runde)
@@ -28,12 +29,23 @@
 - [ ] Safe Mode / Full Access Mode für `write_file`: Überschreiben bestehender
       Dateien je nach Modus bestätigen oder erlauben
 
-## Meilenstein 3 – Browser-Agent
+## Meilenstein 3 – Browser-Agent – Kern fertig 2026-07-05
 
-- [ ] `click_element`, `type_text`, `submit_form` via injectJavaScript + postMessage
+- [x] JS-Bridge WebView ↔ browserService: Request-IDs, Promise-basiert,
+      Timeouts, Fehler-Propagation (`executeScript` + `handleBridgeMessage`)
+- [x] `click_element`: CSS-Selektor zuerst, Fallback auf sichtbaren Text
+      (Links, Buttons, role=button, summary, label, onclick)
+- [x] `type_text`: Input/Textarea/contenteditable mit input+change-Events;
+      verweigert Passwortfelder
+- [x] `submit_form`: requestSubmit/submit, Fallback Enter-Key auf fokussiertem
+      Input; bleibt `risky` (Bestätigungspflicht)
+- [x] `scroll_page` (up/down, ca. eine Bildschirmhöhe)
+- [x] `wait_for_page` (100–10000 ms, meldet readyState/URL/Titel)
+- [ ] YouTube-Transcript-Spezialtool (auf read_page/Bridge aufbauend)
 - [ ] `download_file` mit `File.downloadFileAsync` in die Sandbox (Pfad validiert, bestätigungspflichtig)
 - [ ] `screenshot_page` (benötigt neue Dependency, vorher in DECISIONS.md begründen)
 - [ ] Domain-Allowlist/Blocklist für den Mini-Browser
+- [ ] Browser-Tab automatisch fokussieren, wenn der Agent Browser-Tools nutzt
 
 ## Meilenstein 4 – Echte E-Mail (Gmail) – Kern fertig 2026-07-05
 

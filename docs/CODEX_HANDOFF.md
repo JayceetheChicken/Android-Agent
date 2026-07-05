@@ -12,7 +12,7 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 - **Tool-Executor** (`src/agent/executor/toolExecutor.ts`): führt Schritte aus,
   erzwingt Nutzerbestätigung für riskante Tools (fail closed über
   `executor/confirmation.ts` + `components/ConfirmActionModal.tsx`).
-- **Tool-Registry** (`src/agent/tools/definitions.ts`): alle 23 Tools mit
+- **Tool-Registry** (`src/agent/tools/definitions.ts`): alle 25 Tools mit
   `risky`- und `mock`-Flags. Der Planner-Prompt wird daraus generiert.
 - **Datei-Tools: echt implementiert**, sandboxed auf `<documentDirectory>/sandbox/`
   (`services/storage/sandboxFs.ts` + Pfad-Validierung in `utils/paths.ts`).
@@ -24,9 +24,14 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
   Client-IDs: Platzhalter in `src/config/googleOAuth.ts` (lokal füllen,
   README "Gmail einrichten"). Scope nur `gmail.modify`. OAuth-Test braucht
   einen Development Build (`npx expo run:android`), nicht Expo Go.
-- **Browser-Tools: teilweise** – `open_url`/`go_back` steuern die echte WebView
-  über `services/browser/browserService.ts`; DOM-Tools sind Stubs, die
-  `ok: false` mit Hinweis zurückgeben.
+- **Browser-Tools: echt** (Stand 2026-07-05) – `browserService.ts` hat eine
+  Promise-basierte Script-Bridge (Request-IDs, Timeouts, feste Templates,
+  Argumente via JSON.stringify – nie freier Code). Implementiert: `read_page`
+  (strukturierter PageSnapshot), `click_element` (Selektor → Text-Fallback),
+  `type_text` (Events; verweigert Passwortfelder), `submit_form` (risky!),
+  `scroll_page`, `wait_for_page`, `open_url` (risky), `go_back`.
+  Stubs: `screenshot_page`, `download_file`. Hinweis: Browser-Tab muss einmal
+  geöffnet worden sein, sonst liefern DOM-Tools einen klaren Fehler.
 - **Settings:** API-Key (SecureStore, verschlüsselt), Base-URL + Modell
   (AsyncStorage). Client: `services/ai/openaiClient.ts`
   (POST `{baseUrl}/chat/completions`, OpenAI-kompatibel).
@@ -61,8 +66,9 @@ Es gibt keine Claude-spezifischen Strukturen – alles ist Standard-Expo + TypeS
 ## Nächste Features (Details in docs/TASKS.md)
 
 1. Gmail-Verbindung auf Gerät testen (Client-IDs eintragen, Dev-Build).
-2. `read_page` echt implementieren (WebView-JS-Injection + Textextraktion).
-3. Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (beobachten → neu planen).
+2. Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (act → observe → replan) –
+   die Browser-Tools liefern dafür bereits strukturierte `data`-Payloads.
+3. YouTube-Transcript-Spezialtool (auf read_page/Bridge aufbauend).
 4. Chat- und Agent-Verlauf persistieren (AsyncStorage).
 5. Full Access Mode (bewusst aktivierbar, nur innerhalb verbundener Dienste).
 6. Outlook/Microsoft als zweiter echter Provider (separater Meilenstein).

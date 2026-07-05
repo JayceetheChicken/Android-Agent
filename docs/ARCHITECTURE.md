@@ -188,18 +188,40 @@ enthalten nur Mail-Metadaten/-Inhalte, nie Credentials.
   Noch nicht implementiert – aktuell bestätigt jede riskante Aktion
   (TODO-Anker in `toolExecutor.ts`).
 
-## Spätere echte Browser-Integration
+## Browser-Control-Layer (implementiert)
 
-`services/browser/browserService.ts` ist eine Command-Bridge: Tools schicken
-Kommandos (`open_url`, `go_back`), die WebView im Browser-Tab führt sie aus
-und meldet Navigation zurück. Für echte DOM-Interaktion:
+`services/browser/browserService.ts` hat zwei Kanäle:
 
-1. `injectedJavaScript` / `injectJavaScript` der WebView nutzen, Ergebnisse
-   über `window.ReactNativeWebView.postMessage` zurückgeben.
-2. `read_page`: DOM-Text extrahieren und für das LLM kürzen.
-3. `click_element` / `type_text` / `submit_form`: Selektor-basierte Skripte;
-   `submit_form` bleibt bestätigungspflichtig.
-4. `screenshot_page`: `react-native-view-shot` (neue Dependency, erst dann
-   hinzufügen, wenn wirklich gebraucht – siehe DECISIONS.md).
-5. `download_file`: `File.downloadFileAsync` aus `expo-file-system`,
-   Ziel **immer** über `sanitizeSandboxPath` validieren.
+1. **Command-Bus** (`open_url`, `go_back`): fire-and-forget; der Browser-Tab
+   abonniert und wendet die Kommandos auf seine WebView an.
+2. **Script-Bridge** (Promise-basiert): `executeScript()` erzeugt pro Befehl
+   eine eindeutige Request-ID, baut aus **festen Skript-Templates** das
+   Seiten-Skript, der Screen injiziert es per `injectJavaScript`, die Seite
+   antwortet über `window.ReactNativeWebView.postMessage`, und
+   `handleBridgeMessage()` löst das passende Promise auf. Fehler in der Seite
+   werden als abgelehnte Promises propagiert; Timeouts (6–10 s) fangen den
+   Fall ab, dass die Seite navigiert, bevor sie antwortet.
+
+Darauf implementiert: `readPage()` (sichtbarer Text max. 6000 Zeichen,
+Headings/Links/Buttons/Inputs je max. 50, unsichtbare Elemente gefiltert),
+`clickElement()` (CSS-Selektor, Fallback sichtbarer Text), `typeText()`
+(input/change-Events, **verweigert Passwortfelder**), `submitForm()`
+(requestSubmit, Fallback Enter-Key; Tool bleibt bestätigungspflichtig),
+`scrollPage()`, `waitForPage()`.
+
+Sicherheitsgrenzen des Browsers:
+- Die WebView ist der einzige Ort, an dem DOM-Aktionen laufen; Agent-Tools
+  kennen weder Ref noch Screen. Es wird nie freier (LLM- oder Nutzer-)Code
+  injiziert – nur die festen Templates, Argumente via `JSON.stringify`.
+- `open_url` (externe Seite) und `submit_form` (rechtlich/sicherheitsrelevant:
+  Logins, Käufe, Kündigungen) bleiben `risky` → ConfirmActionModal.
+- Kein Auto-Ausfüllen von Passwortfeldern (`type_text` bricht ab).
+
+Noch offen (siehe TASKS.md):
+- `screenshot_page`: `react-native-view-shot` (neue Dependency, erst dann
+  hinzufügen, wenn wirklich gebraucht – siehe DECISIONS.md).
+- `download_file`: `File.downloadFileAsync` aus `expo-file-system`,
+  Ziel **immer** über `sanitizeSandboxPath` validieren.
+- Agent-Loop V2 (`act → observe → replan`) setzt auf `read_page`/
+  `wait_for_page` auf; die Tool-Ergebnisse sind dafür bereits strukturiert
+  (`data`-Feld mit `PageSnapshot`).

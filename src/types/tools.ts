@@ -25,6 +25,8 @@ export const BROWSER_TOOL_NAMES = [
   'click_element',
   'type_text',
   'submit_form',
+  'scroll_page',
+  'wait_for_page',
   'go_back',
   'screenshot_page',
   'download_file',
