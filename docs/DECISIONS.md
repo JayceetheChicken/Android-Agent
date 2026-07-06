@@ -295,3 +295,20 @@ Timeout und eine Diagnose mit aktuellem Browser-State.
   der Agent braucht trotzdem einen stabilen Status, um weiterzuplanen.
 - Sicherheit bleibt unveraendert: keine freien Skripte, weiterhin nur
   `https:`/`about:blank`, keine Android-Systemsteuerung.
+
+## 19. `fetch_current_page_text` als HTML-Fallback fuer schwere Browserseiten (2026-07-06)
+
+**Entscheidung:** Wenn `read_page` ueber die WebView-DOM-Bridge timeoutet, kann
+der Agent `fetch_current_page_text` nutzen. Das Tool nimmt ausschliesslich die
+aktuelle `https:`-URL aus `browserService.getState()`, laedt sie per HTTP
+`fetch` mit HTML-Accept-Headern und extrahiert ohne neue Dependency Titel,
+Meta-Description, H1-H3, Links und groben Text aus dem HTML.
+
+**Warum:**
+- Manche dynamische Seiten sind im internen Browser sichtbar geladen, antworten
+  aber nicht schnell genug auf die WebView-JS-Bridge. Ein HTTP-Fallback liefert
+  trotzdem oft verwertbare Teildaten.
+- Das Tool ist bewusst kein Web-Suchtool und kann keine beliebige URL vom Modell
+  bekommen; es liest nur die bereits im internen Browser geoeffnete HTTPS-Seite.
+- Sicherheit bleibt gleich: nur HTTPS, keine Android-Intents, keine Cookies/
+  Tokens in Tool-Output, keine freie Codeausfuehrung und keine neue Dependency.

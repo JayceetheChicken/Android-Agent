@@ -28,6 +28,7 @@ export const BROWSER_TOOL_NAMES = [
   'scroll_page',
   'wait_for_page',
   'browser_get_state',
+  'fetch_current_page_text',
   'go_back',
   'stop_loading',
   'screenshot_page',

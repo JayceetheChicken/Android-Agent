@@ -90,6 +90,34 @@ function formatBrowserState(state: browserService.BrowserState): string {
   return lines.join('\n');
 }
 
+function formatFetchedPage(page: browserService.FetchedPageText): string {
+  const lines: string[] = [
+    `URL: ${page.url}`,
+    `HTTP status: ${page.status}`,
+    `Title: ${page.title || '(no title)'}`,
+    `HTML length: ${page.htmlLength}`,
+  ];
+  if (page.metaDescription) {
+    lines.push(`Meta description: ${page.metaDescription}`);
+  }
+  if (page.headings.length > 0) {
+    lines.push(
+      '',
+      'Headings:',
+      ...page.headings.slice(0, 15).map((h) => `  ${'#'.repeat(h.level)} ${h.text}`),
+    );
+  }
+  if (page.links.length > 0) {
+    lines.push(
+      '',
+      `Links (${page.links.length}${page.links.length === 40 ? '+, capped' : ''}):`,
+      ...page.links.slice(0, 20).map((l) => `  - "${l.text}" -> ${l.href}`),
+    );
+  }
+  lines.push('', 'Fetched text:', page.text || '(empty HTML text)');
+  return lines.join('\n');
+}
+
 /**
  * Browser tools drive the in-app WebView exclusively through browserService's
  * promise-based script bridge. Tools never see the WebView, never run
@@ -185,6 +213,16 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
       ok: true,
       output: `Current native browser state:\n${formatBrowserState(state)}`,
       data: state,
+    };
+  },
+
+  fetch_current_page_text: async (params) => {
+    const maxChars = optionalNumber(params, 'max_chars');
+    const page = await browserService.fetchCurrentPageText(maxChars);
+    return {
+      ok: true,
+      output: formatFetchedPage(page),
+      data: page,
     };
   },
 

@@ -56,6 +56,17 @@ export interface PageSnapshot {
   }>;
 }
 
+export interface FetchedPageText {
+  url: string;
+  status: number;
+  title: string;
+  metaDescription: string;
+  headings: Array<{ level: number; text: string }>;
+  links: Array<{ text: string; href: string }>;
+  text: string;
+  htmlLength: number;
+}
+
 type Listener = (command: BrowserCommand) => void;
 type ScriptRunner = (script: string) => void;
 
@@ -243,6 +254,131 @@ function formatStateForError(current: BrowserState): string {
   ]
     .filter(Boolean)
     .join(', ');
+}
+
+function normalizeFetchTextLimit(maxChars?: number): number {
+  if (maxChars === undefined) {
+    return 8000;
+  }
+  if (!Number.isFinite(maxChars)) {
+    throw new Error('max_chars must be a finite number.');
+  }
+  return Math.max(100, Math.min(20000, Math.floor(maxChars)));
+}
+
+function decodeHtmlEntities(input: string): string {
+  const named: Record<string, string> = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    '#39': "'",
+    nbsp: ' ',
+  };
+  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    const lower = entity.toLowerCase();
+    if (named[lower] !== undefined) {
+      return named[lower];
+    }
+    if (lower.startsWith('#x')) {
+      const value = Number.parseInt(lower.slice(2), 16);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : match;
+    }
+    if (lower.startsWith('#')) {
+      const value = Number.parseInt(lower.slice(1), 10);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : match;
+    }
+    return match;
+  });
+}
+
+function cleanHtmlText(input: string, maxChars?: number): string {
+  const cleaned = decodeHtmlEntities(input)
+    .replace(/\s+/g, ' ')
+    .trim();
+  return maxChars && cleaned.length > maxChars ? `${cleaned.slice(0, maxChars)}...` : cleaned;
+}
+
+function stripHtmlTags(input: string): string {
+  return input
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<template\b[\s\S]*?<\/template>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ');
+}
+
+function getAttribute(tag: string, name: string): string {
+  const pattern = new RegExp(`${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i');
+  return pattern.exec(tag)?.[2] ?? '';
+}
+
+function extractTitle(html: string): string {
+  const match = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  return match ? cleanHtmlText(stripHtmlTags(match[1]), 300) : '';
+}
+
+function extractMetaDescription(html: string): string {
+  const metaPattern = /<meta\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = metaPattern.exec(html)) !== null) {
+    const tag = match[0];
+    const name = getAttribute(tag, 'name').toLowerCase();
+    const property = getAttribute(tag, 'property').toLowerCase();
+    if (name === 'description' || property === 'og:description') {
+      return cleanHtmlText(getAttribute(tag, 'content'), 500);
+    }
+  }
+  return '';
+}
+
+function extractHeadings(html: string): Array<{ level: number; text: string }> {
+  const headings: Array<{ level: number; text: string }> = [];
+  const pattern = /<h([123])\b[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null && headings.length < 30) {
+    const text = cleanHtmlText(stripHtmlTags(match[2]), 180);
+    if (text.length > 0) {
+      headings.push({ level: Number(match[1]), text });
+    }
+  }
+  return headings;
+}
+
+function extractLinks(html: string, baseUrl: string): Array<{ text: string; href: string }> {
+  const links: Array<{ text: string; href: string }> = [];
+  const pattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null && links.length < 40) {
+    const rawHref = getAttribute(match[1], 'href').trim();
+    if (
+      rawHref.length === 0 ||
+      /^(javascript|file|intent|market|tel|mailto):/i.test(rawHref)
+    ) {
+      continue;
+    }
+    let href: string;
+    try {
+      const parsed = new URL(rawHref, baseUrl);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        continue;
+      }
+      href = parsed.toString();
+    } catch {
+      continue;
+    }
+    const text = cleanHtmlText(stripHtmlTags(match[2]), 120);
+    if (text.length > 0) {
+      links.push({ text, href });
+    }
+  }
+  return links;
+}
+
+function extractVisibleHtmlText(html: string, maxChars: number): string {
+  return cleanHtmlText(stripHtmlTags(html), maxChars);
 }
 
 // ----------------------------------------------------------- script bridge
@@ -638,4 +774,56 @@ export async function waitForPage(ms?: number): Promise<BrowserState> {
   const delay = Math.min(10000, Math.max(100, ms ?? 1500));
   await new Promise((resolve) => setTimeout(resolve, delay));
   return getState();
+}
+
+/**
+ * Fetches the currently open https page outside the WebView and extracts
+ * lightweight text from the returned HTML. This is a fallback for pages whose
+ * DOM cannot be read through the WebView script bridge quickly enough.
+ */
+export async function fetchCurrentPageText(maxChars?: number): Promise<FetchedPageText> {
+  const current = getState();
+  const url = validateUrl(current.currentUrl);
+  const textLimit = normalizeFetchTextLimit(maxChars);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Fetching the current page failed: ${message}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Fetching the current page failed with HTTP ${response.status}.`);
+  }
+
+  const html = await response.text();
+  const title = extractTitle(html);
+  const metaDescription = extractMetaDescription(html);
+  const headings = extractHeadings(html);
+  const links = extractLinks(html, url);
+  let text = extractVisibleHtmlText(html, textLimit);
+  if (text.length === 0) {
+    text = [title, metaDescription, ...headings.map((h) => h.text), ...links.map((l) => l.text)]
+      .filter((part) => part.length > 0)
+      .join('\n')
+      .slice(0, textLimit);
+  }
+
+  return {
+    url,
+    status: response.status,
+    title,
+    metaDescription,
+    headings,
+    links,
+    text,
+    htmlLength: html.length,
+  };
 }

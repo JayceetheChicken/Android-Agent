@@ -339,6 +339,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     mock: false,
   },
   {
+    name: 'fetch_current_page_text',
+    category: 'browser',
+    description:
+      'Fetch the currently open https URL over HTTP and extract title, meta description, headings, links and text without WebView DOM injection. Use as fallback when read_page fails.',
+    params: {
+      max_chars: 'number - optional text limit, default 8000, max 20000',
+    },
+    risky: false,
+    mock: false,
+  },
+  {
     name: 'go_back',
     category: 'browser',
     description: 'Navigate back in the mini browser history.',

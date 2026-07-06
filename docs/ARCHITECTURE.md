@@ -338,7 +338,13 @@ und Links als Fallback, Headings max. 30, Links max. 40, Buttons/Inputs max. 30)
 (input/change-Events, **verweigert Passwortfelder**), `submitForm()`
 (requestSubmit, Fallback Enter-Key; Tool bleibt bestätigungspflichtig),
 `scrollPage()`, `waitForPage()` (native State, keine JS-Injection),
-`browser_get_state` und `stop_loading`.
+`browser_get_state`, `stop_loading` und `fetch_current_page_text`.
+`fetch_current_page_text` ist der robuste Fallback, wenn die WebView-DOM-
+Bridge bei grossen/dynamischen Seiten nicht antwortet: Es nimmt nur die
+aktuelle `https:`-URL aus dem Browser-State, laedt sie per HTTP `fetch` mit
+HTML-Accept-Headern und extrahiert ohne Dependency Titel, Meta-Description,
+H1-H3, bis zu 40 Links und groben Text aus dem HTML. Es ersetzt `read_page`
+nicht, sondern liefert Teildaten, wenn DOM-Injection zu langsam ist.
 
 Sicherheitsgrenzen des Browsers:
 - Die WebView ist der einzige Ort, an dem DOM-Aktionen laufen; Agent-Tools

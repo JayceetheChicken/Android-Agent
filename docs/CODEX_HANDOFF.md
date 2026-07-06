@@ -38,11 +38,13 @@ Es gibt keine Claude-spezifischen Strukturen - alles ist Standard-Expo + TypeScr
 - **Browser-Tools: echt** (Stand 2026-07-06): `read_page`, `click_element`,
   `type_text` (verweigert Passwortfelder und secret-artige Eingaben),
   `submit_form` (risky), `scroll_page`, `wait_for_page`, `browser_get_state`,
-  `stop_loading`, `open_url` (risky), `go_back`. `wait_for_page` und
+  `fetch_current_page_text`, `stop_loading`, `open_url` (risky), `go_back`. `wait_for_page` und
   `browser_get_state` lesen nativen WebView-State ohne JS-Injection; `read_page`
   nutzt weiter die Script-Bridge, ist aber ein leichter Extractor ohne
   `body.innerText`, mit Meta-/Link-Fallback, laengerem Timeout und besserer
-  Diagnose mit URL/loading/error-State. Der Browser-Tab wird per `lazy: false` beim App-Start gemountet;
+  Diagnose mit URL/loading/error-State. `fetch_current_page_text` fetches nur
+  die aktuelle HTTPS-URL und extrahiert HTML grob ohne Dependency, falls
+  `read_page` timeoutet. Der Browser-Tab wird per `lazy: false` beim App-Start gemountet;
   `ensureBrowserReady()` wartet bei Bedarf kurz auf die WebView. WebView-
   Navigation wird mit `onShouldStartLoadWithRequest` auf `https:` und internes
   `about:blank` begrenzt. Externe Android-Intents/Schemes werden blockiert.

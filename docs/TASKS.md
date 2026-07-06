@@ -57,6 +57,8 @@
 - [x] `read_page` robuster: 15s Timeout und Diagnose mit URL/loading/error-State
 - [x] `read_page` Lightweight-Extractor: kein `body.innerText`, frueher Abbruch,
       Meta-Description/Links-Fallback fuer grosse dynamische Seiten
+- [x] `fetch_current_page_text`: Fallback ohne WebView-DOM-Injection; fetches nur
+      die aktuelle HTTPS-URL und extrahiert HTML grob ohne neue Dependency
 - [x] Browser-Tab automatisch verfügbar: `lazy: false` mountet die WebView beim
       App-Start; `ensureBrowserReady()` als Sicherheitsnetz (2026-07-05)
 - [x] WebView-Navigation gehärtet: `onShouldStartLoadWithRequest` +
