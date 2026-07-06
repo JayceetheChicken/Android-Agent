@@ -4,7 +4,7 @@ import { getRelevantMemoryContext } from '../services/memory/memoryService';
 import type { AgentPlan, PlanStep } from '../types/agent';
 import type { AISettings } from '../types/settings';
 import { extractJsonObject } from '../utils/json';
-import { isToolName, TOOL_DEFINITIONS } from './tools';
+import { describeToolsForPrompt, isToolName } from './tools';
 
 /**
  * Planner: turns a user task into an AgentPlan (pure JSON, no execution).
@@ -12,18 +12,14 @@ import { isToolName, TOOL_DEFINITIONS } from './tools';
  * Security model: the model output is DATA, not code. It is parsed and
  * validated here; execution happens step by step in the Tool-Executor,
  * where risky steps additionally require user confirmation.
+ *
+ * This is the static single-shot planner. For browser research and other
+ * iterative tasks the app uses the Agent Loop (src/agent/loop/), which keeps
+ * this planner's guarantees but replans after every observation.
  */
 
 function describeTools(): string {
-  return TOOL_DEFINITIONS.map((tool) => {
-    const params =
-      Object.keys(tool.params).length > 0
-        ? Object.entries(tool.params)
-            .map(([key, doc]) => `      - ${key}: ${doc}`)
-            .join('\n')
-        : '      (no parameters)';
-    return `  - ${tool.name} (${tool.category}${tool.risky ? ', RISKY – needs user confirmation' : ''})\n    ${tool.description}\n    params:\n${params}`;
-  }).join('\n');
+  return describeToolsForPrompt();
 }
 
 export function buildPlannerSystemPrompt(): string {
@@ -33,8 +29,8 @@ export function buildPlannerSystemPrompt(): string {
     '',
     'Hard rules:',
     '- You can only use the tools listed below. Never invent tools.',
-    '- All file paths are relative to the app sandbox. Never use absolute paths, drive letters or "..".',
-    '- You have NO access to the Android system, other apps, contacts or files outside the sandbox.',
+    '- Sandbox file paths are relative to the app sandbox. Never use absolute paths, drive letters or "..".',
+    '- You have NO access to the Android system, other apps or contacts. You may only use connected services such as Google Drive through the listed tools.',
     `- A plan has at most ${MAX_PLAN_STEPS} steps.`,
     '- Risky tools are shown to the user for confirmation before they run. Plan them only when necessary.',
     '- Use local user memory when it helps answer or plan. The memory belongs to the app, not to any model provider.',

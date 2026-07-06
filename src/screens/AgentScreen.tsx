@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,9 +9,8 @@ import {
   View,
 } from 'react-native';
 
+import { runAgentLoop } from '../agent/loop/agentLoop';
 import { setConfirmationHandler } from '../agent/executor/confirmation';
-import { executeStep } from '../agent/executor/toolExecutor';
-import { createPlan } from '../agent/planner';
 import { ConfirmActionModal } from '../components/ConfirmActionModal';
 import { PlanStepCard } from '../components/PlanStepCard';
 import { colors, spacing } from '../components/theme';
@@ -24,20 +23,23 @@ interface PendingConfirmation {
 }
 
 /**
- * Agentic Mode: task in → JSON plan → user reviews → step-by-step execution.
- * Risky steps pause on the ConfirmActionModal until the user decides.
+ * Agentic Mode (Loop V2): the agent works iteratively – plan → act → observe →
+ * replan → … → final answer. Each step shows the chosen tool, the reason and
+ * the result live. Risky steps still pause on the ConfirmActionModal.
  */
 export function AgentScreen(): React.JSX.Element {
   const [task, setTask] = useState('');
-  const [goal, setGoal] = useState<string | null>(null);
-  const [executions, setExecutions] = useState<StepExecution[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'planning' | 'review' | 'executing' | 'finished'>(
-    'idle',
-  );
+  const [steps, setSteps] = useState<StepExecution[]>([]);
+  const [finalAnswer, setFinalAnswer] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'running' | 'finished'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
 
-  // Bridge executor -> modal. Registered only while this screen is mounted.
+  // Live step list is built via loop callbacks; a ref keeps it in sync.
+  const stepsRef = useRef<StepExecution[]>([]);
+
+  // Bridge executor -> modal. Registered while this screen is mounted (tabs stay
+  // mounted, so confirmation works even when the Browser tab is in front).
   useEffect(() => {
     setConfirmationHandler(
       (request) =>
@@ -48,109 +50,111 @@ export function AgentScreen(): React.JSX.Element {
     return () => setConfirmationHandler(null);
   }, []);
 
-  const plan = useCallback(async () => {
+  const run = useCallback(async () => {
     const text = task.trim();
-    if (text.length === 0 || phase === 'planning' || phase === 'executing') {
+    if (text.length === 0 || phase === 'running') {
       return;
     }
     setError(null);
-    setGoal(null);
-    setExecutions([]);
-    setPhase('planning');
+    setFinalAnswer(null);
+    stepsRef.current = [];
+    setSteps([]);
+    setPhase('running');
+
     try {
       const settings = await loadSettings();
-      const agentPlan = await createPlan(settings, text);
-      setGoal(agentPlan.goal);
-      setExecutions(agentPlan.steps.map((step) => ({ step, status: 'pending' })));
-      setPhase('review');
+      await runAgentLoop(settings, text, {
+        onToolStart: ({ tool, params, reason }) => {
+          stepsRef.current = [
+            ...stepsRef.current,
+            { step: { tool, params, reason }, status: 'running' },
+          ];
+          setSteps(stepsRef.current);
+        },
+        onToolResult: ({ index, result }) => {
+          const next = [...stepsRef.current];
+          if (next[index]) {
+            next[index] = {
+              ...next[index],
+              status: result.ok ? 'done' : result.rejected ? 'rejected' : 'failed',
+              result,
+            };
+            stepsRef.current = next;
+            setSteps(next);
+          }
+        },
+        onFinal: (answer) => setFinalAnswer(answer),
+      });
+      setPhase('finished');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      setPhase('idle');
+      setPhase('finished');
     }
   }, [task, phase]);
 
-  const run = useCallback(async () => {
-    if (phase !== 'review') {
-      return;
-    }
-    setPhase('executing');
-    // Work on a local copy; state updates per step keep the UI in sync.
-    const current = [...executions];
-    for (let i = 0; i < current.length; i += 1) {
-      const update = (execution: StepExecution): void => {
-        current[i] = execution;
-        setExecutions([...current]);
-      };
-      update({ ...current[i], status: 'running' });
-      const result = await executeStep(current[i].step);
-      update({
-        ...current[i],
-        status: result.ok ? 'done' : result.rejected ? 'rejected' : 'failed',
-        result,
-      });
-    }
-    setPhase('finished');
-  }, [phase, executions]);
-
   const reset = useCallback(() => {
-    setGoal(null);
-    setExecutions([]);
+    stepsRef.current = [];
+    setSteps([]);
+    setFinalAnswer(null);
     setError(null);
     setPhase('idle');
   }, []);
 
-  const busy = phase === 'planning' || phase === 'executing';
+  const running = phase === 'running';
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Agentic Mode</Text>
         <Text style={styles.subtitle}>
-          Beschreibe eine Aufgabe. Der Agent erstellt zuerst einen JSON-Plan – ausgeführt wird erst
-          nach deinem Review, riskante Schritte nur mit Bestätigung.
+          Beschreibe eine Aufgabe. Der Agent arbeitet iterativ: Er plant einen Schritt, führt ein
+          Tool aus, liest das Ergebnis und plant den nächsten Schritt – bis zur finalen Antwort.
+          Riskante Schritte (z. B. Formular abschicken, E-Mail senden) brauchen deine Bestätigung.
         </Text>
         <TextInput
           style={styles.input}
           value={task}
           onChangeText={setTask}
-          placeholder='z. B. "Lege einen Ordner notes an und schreibe eine todo.txt hinein"'
+          placeholder='z. B. "Suche auf example.com nach News zu React Native und fasse die Titel zusammen"'
           placeholderTextColor={colors.textMuted}
           multiline
-          editable={!busy}
+          editable={!running}
         />
         <View style={styles.buttonRow}>
           <Pressable
-            style={[styles.button, styles.primaryButton, busy && styles.disabled]}
-            onPress={plan}
+            style={[styles.button, styles.primaryButton, running && styles.disabled]}
+            onPress={run}
+            disabled={running}
           >
-            {phase === 'planning' ? (
+            {running ? (
               <ActivityIndicator color={colors.text} />
             ) : (
-              <Text style={styles.buttonText}>Plan erstellen</Text>
+              <Text style={styles.buttonText}>Aufgabe starten</Text>
             )}
           </Pressable>
-          {phase === 'review' && (
-            <Pressable style={[styles.button, styles.runButton]} onPress={run}>
-              <Text style={styles.buttonText}>Plan ausführen</Text>
-            </Pressable>
-          )}
-          {(phase === 'review' || phase === 'finished') && (
+          {phase === 'finished' && (
             <Pressable style={[styles.button, styles.resetButton]} onPress={reset}>
               <Text style={styles.buttonText}>Zurücksetzen</Text>
             </Pressable>
           )}
         </View>
+
         {error && <Text style={styles.error}>{error}</Text>}
-        {goal && (
-          <View style={styles.goalBox}>
-            <Text style={styles.goalLabel}>Ziel des Plans</Text>
-            <Text style={styles.goalText}>{goal}</Text>
-          </View>
-        )}
-        {executions.map((execution, index) => (
+
+        {steps.map((execution, index) => (
           <PlanStepCard key={`${execution.step.tool}-${index}`} execution={execution} index={index} />
         ))}
-        {phase === 'finished' && <Text style={styles.finished}>Plan abgeschlossen.</Text>}
+
+        {running && steps.length === 0 && (
+          <Text style={styles.thinking}>Agent plant den ersten Schritt…</Text>
+        )}
+
+        {finalAnswer && (
+          <View style={styles.answerBox}>
+            <Text style={styles.answerLabel}>Antwort</Text>
+            <Text style={styles.answerText}>{finalAnswer}</Text>
+          </View>
+        )}
       </ScrollView>
       <ConfirmActionModal
         request={confirmation?.request ?? null}
@@ -204,26 +208,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButton: { backgroundColor: colors.primary },
-  runButton: { backgroundColor: colors.success },
   resetButton: { backgroundColor: colors.surfaceLight },
   disabled: { opacity: 0.6 },
   buttonText: { color: colors.text, fontWeight: '600', fontSize: 13 },
   error: { color: colors.danger, paddingHorizontal: spacing.l, marginTop: spacing.s },
-  goalBox: {
+  thinking: {
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.l,
+    fontStyle: 'italic',
+  },
+  answerBox: {
     backgroundColor: colors.surface,
     borderRadius: 10,
     marginHorizontal: spacing.m,
-    marginVertical: spacing.s,
+    marginTop: spacing.m,
     padding: spacing.m,
     borderLeftWidth: 3,
-    borderLeftColor: colors.primary,
+    borderLeftColor: colors.success,
   },
-  goalLabel: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase' },
-  goalText: { color: colors.text, fontSize: 14, marginTop: spacing.xs },
-  finished: {
-    color: colors.success,
-    textAlign: 'center',
-    marginTop: spacing.m,
-    fontWeight: '600',
-  },
+  answerLabel: { color: colors.textMuted, fontSize: 11, textTransform: 'uppercase' },
+  answerText: { color: colors.text, fontSize: 15, lineHeight: 21, marginTop: spacing.xs },
 });

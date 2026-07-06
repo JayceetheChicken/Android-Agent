@@ -6,9 +6,10 @@
  * consider them private. NEVER put a client secret anywhere in this app;
  * the PKCE flow is designed to work without one.
  *
- * How to obtain the IDs: see README.md, section "Gmail einrichten".
+ * How to obtain the IDs: see README.md, sections "Gmail einrichten" and
+ * "Google Drive einrichten".
  * Short version (Google Cloud Console, https://console.cloud.google.com):
- *   1. Create/select a project, enable the "Gmail API".
+ *   1. Create/select a project, enable the needed Google APIs.
  *   2. Configure the OAuth consent screen (External, add yourself as test user).
  *   3. Credentials -> Create credentials -> OAuth client ID:
  *      - "Android"  -> package name + SHA-1  -> androidClientId
@@ -32,6 +33,14 @@ export const GOOGLE_OAUTH_CONFIG = {
  *   https://www.googleapis.com/auth/gmail.send     (send only)
  */
 export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
+
+/**
+ * Full Google Drive scope for the agent's connected-service workspace.
+ * This intentionally allows listing, downloading, uploading, moving and
+ * trashing existing Drive files after the user connects and confirms risky
+ * tool steps. Public releases need Google's restricted-scope verification.
+ */
+export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive'];
 
 /** Custom URI scheme registered in app.json ("scheme"). */
 export const OAUTH_REDIRECT_SCHEME = 'androidagent';

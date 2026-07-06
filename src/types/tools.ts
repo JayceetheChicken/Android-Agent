@@ -34,13 +34,32 @@ export const BROWSER_TOOL_NAMES = [
 
 export const MEMORY_TOOL_NAMES = ['remember', 'search_memory', 'list_memory', 'forget_memory'] as const;
 
+export const DRIVE_TOOL_NAMES = [
+  'connect_drive_account',
+  'drive_get_status',
+  'drive_list_files',
+  'drive_search_files',
+  'drive_download_to_sandbox',
+  'drive_upload_from_sandbox',
+  'drive_move_file',
+  'drive_create_folder',
+  'drive_trash_file',
+  'drive_rename_file',
+] as const;
+
 export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
 export type EmailToolName = (typeof EMAIL_TOOL_NAMES)[number];
 export type BrowserToolName = (typeof BROWSER_TOOL_NAMES)[number];
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number];
-export type ToolName = FileToolName | EmailToolName | BrowserToolName | MemoryToolName;
+export type DriveToolName = (typeof DRIVE_TOOL_NAMES)[number];
+export type ToolName =
+  | FileToolName
+  | EmailToolName
+  | BrowserToolName
+  | MemoryToolName
+  | DriveToolName;
 
-export type ToolCategory = 'files' | 'email' | 'browser' | 'memory';
+export type ToolCategory = 'files' | 'email' | 'browser' | 'memory' | 'drive';
 
 /** Parameters as produced by the LLM plan – always validated inside the tool handler. */
 export type ToolParams = Record<string, unknown>;

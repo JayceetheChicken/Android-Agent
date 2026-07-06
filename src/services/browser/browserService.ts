@@ -24,6 +24,9 @@ export interface BrowserState {
   currentUrl: string;
   currentTitle: string;
   canGoBack: boolean;
+  /** Last navigation that was blocked by the protocol allowlist (if any). */
+  lastBlockedUrl?: string;
+  lastBlockedReason?: string;
 }
 
 export interface PageSnapshot {
@@ -55,6 +58,7 @@ interface PendingRequest {
 
 const DEFAULT_TIMEOUT_MS = 6000;
 const READ_PAGE_TIMEOUT_MS = 10000;
+const READY_TIMEOUT_MS = 4000;
 
 const state: BrowserState = {
   currentUrl: BROWSER_HOME_URL,
@@ -65,6 +69,38 @@ const state: BrowserState = {
 const listeners = new Set<Listener>();
 const pending = new Map<string, PendingRequest>();
 let scriptRunner: ScriptRunner | null = null;
+
+// ------------------------------------------------------------- readiness
+
+/**
+ * The browser is "ready" once the Browser screen is mounted: it has both
+ * subscribed to the command bus and registered a script runner. With the
+ * Browser tab mounted eagerly (lazy: false) this is true from app launch.
+ */
+export function isBrowserReady(): boolean {
+  return scriptRunner !== null && listeners.size > 0;
+}
+
+/**
+ * Ensures the in-app browser is mounted before a browser tool runs. The
+ * Browser tab is mounted eagerly by React Navigation, so this usually returns
+ * immediately; the short wait covers app startup and WebView initialization.
+ */
+export async function ensureBrowserReady(timeoutMs = READY_TIMEOUT_MS): Promise<void> {
+  if (isBrowserReady()) {
+    return;
+  }
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (isBrowserReady()) {
+      return;
+    }
+  }
+  throw new Error(
+    'The in-app browser is not available yet. Please wait a moment and try again.',
+  );
+}
 
 // ------------------------------------------------------------- command bus
 
@@ -79,6 +115,32 @@ export function validateUrl(rawUrl: string): string {
     throw new Error(`Only ${ALLOWED_URL_PROTOCOLS.join(', ')} URLs are allowed.`);
   }
   return parsed.toString();
+}
+
+export interface NavigationDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
+/** Runtime WebView navigation guard: only https and internal about:blank. */
+export function validateNavigationUrl(rawUrl: string): NavigationDecision {
+  const trimmed = rawUrl.trim();
+  if (trimmed === 'about:blank') {
+    return { allowed: true };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { allowed: false, reason: `Blocked invalid navigation URL: "${rawUrl}".` };
+  }
+  if (ALLOWED_URL_PROTOCOLS.includes(parsed.protocol as (typeof ALLOWED_URL_PROTOCOLS)[number])) {
+    return { allowed: true };
+  }
+  return {
+    allowed: false,
+    reason: `Blocked navigation to protocol "${parsed.protocol}". Only https: is allowed.`,
+  };
 }
 
 export function subscribe(listener: Listener): () => void {
@@ -107,6 +169,12 @@ export function requestGoBack(): void {
 /** Called by the Browser screen on navigation changes. */
 export function reportNavigation(update: Partial<BrowserState>): void {
   Object.assign(state, update);
+}
+
+/** Called by the Browser screen when it blocks a non-https navigation. */
+export function reportBlockedNavigation(url: string, reason: string): void {
+  state.lastBlockedUrl = url;
+  state.lastBlockedReason = reason;
 }
 
 export function getState(): BrowserState {
@@ -159,14 +227,12 @@ export function handleBridgeMessage(raw: string): boolean {
  * Runs one of the fixed script templates below inside the page.
  * `body` must be a function body that returns a JSON-serializable value.
  */
-function executeScript<T>(body: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+async function executeScript<T>(body: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+  await ensureBrowserReady();
+  const runner = scriptRunner;
   return new Promise<T>((resolve, reject) => {
-    if (!scriptRunner) {
-      reject(
-        new Error(
-          'The mini browser is not open. Open the Browser tab once (or use open_url) first.',
-        ),
-      );
+    if (!runner) {
+      reject(new Error('The in-app browser is not available yet.'));
       return;
     }
     const id = generateId();
@@ -190,7 +256,7 @@ function executeScript<T>(body: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise
       '}catch(e){' +
       `__post({__agentBridge:true,id:${JSON.stringify(id)},ok:false,error:String(e&&e.message?e.message:e)});` +
       '}})();true;';
-    scriptRunner(wrapped);
+    runner(wrapped);
   });
 }
 
@@ -383,11 +449,43 @@ export async function clickElement(
   return executeScript(clickScript(selectorOrText));
 }
 
+/**
+ * Heuristic guard: refuse text that looks like a secret (API key, token, …).
+ * The in-page script already refuses password input fields; this adds a
+ * content-based check so credentials are not auto-typed into normal fields.
+ */
+function looksLikeSecret(text: string): boolean {
+  const value = text.trim();
+  if (value.length === 0 || /\s/.test(value) || value.includes('@')) {
+    return false; // sentences and email addresses are fine
+  }
+  // Known credential prefixes (OpenAI, GitHub, Slack, Google, AWS, …).
+  if (/^(sk-|rk-|ghp_|gho_|github_pat_|xox[baprs]-|AIza|ya29\.|AKIA|eyJ)/.test(value)) {
+    return true;
+  }
+  // Long high-entropy token: mixed letters+digits, no spaces, key-like charset.
+  if (
+    value.length >= 25 &&
+    /^[A-Za-z0-9_\-.]+$/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[A-Za-z]/.test(value)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Types into input/textarea/contenteditable and fires input+change events. */
 export async function typeText(
   selector: string,
   text: string,
 ): Promise<{ typedChars: number; into: string }> {
+  if (looksLikeSecret(text)) {
+    throw new Error(
+      'Refusing to type text that looks like a password, API key or token. ' +
+        'Enter such secrets manually in the Browser tab.',
+    );
+  }
   return executeScript(typeScript(selector, text));
 }
 
@@ -408,8 +506,21 @@ export async function scrollPage(
 /** Waits (100–10000 ms, default 1500) and reports the page's ready state. */
 export async function waitForPage(
   ms?: number,
-): Promise<{ readyState: string; url: string; title: string }> {
+): Promise<{
+  readyState: string;
+  url: string;
+  title: string;
+  lastBlockedUrl?: string;
+  lastBlockedReason?: string;
+}> {
   const delay = Math.min(10000, Math.max(100, ms ?? 1500));
   await new Promise((resolve) => setTimeout(resolve, delay));
-  return executeScript(PAGE_STATUS_SCRIPT);
+  const status = await executeScript<{ readyState: string; url: string; title: string }>(
+    PAGE_STATUS_SCRIPT,
+  );
+  return {
+    ...status,
+    lastBlockedUrl: state.lastBlockedUrl,
+    lastBlockedReason: state.lastBlockedReason,
+  };
 }

@@ -18,6 +18,14 @@ export interface SandboxEntry {
   size: number | null;
 }
 
+export interface SandboxFileInfo {
+  name: string;
+  path: string;
+  size: number | null;
+  mimeType: string | null;
+  uri: string;
+}
+
 function sandboxRoot(): Directory {
   const root = new Directory(Paths.document, SANDBOX_DIR_NAME);
   if (!root.exists) {
@@ -64,6 +72,29 @@ export async function readTextFile(relativePath: string): Promise<string> {
   return file.text();
 }
 
+export async function readBinaryFile(relativePath: string): Promise<Uint8Array> {
+  const file = resolveFile(relativePath);
+  if (!file.exists) {
+    throw new Error(`File not found: "${relativePath}"`);
+  }
+  return file.bytes();
+}
+
+export async function getFileInfo(relativePath: string): Promise<SandboxFileInfo> {
+  const path = sanitizeSandboxPath(relativePath);
+  const file = resolveFile(path);
+  if (!file.exists) {
+    throw new Error(`File not found: "${relativePath}"`);
+  }
+  return {
+    name: file.name,
+    path,
+    size: file.size ?? null,
+    mimeType: file.type.length > 0 ? file.type : null,
+    uri: file.uri,
+  };
+}
+
 export async function existsInSandbox(relativePath: string): Promise<boolean> {
   const sanitized = sanitizeSandboxPath(relativePath);
   if (sanitized.length === 0) {
@@ -87,6 +118,18 @@ export async function writeTextFile(relativePath: string, content: string): Prom
     file.create();
   }
   file.write(content);
+}
+
+export async function writeBinaryFile(relativePath: string, bytes: Uint8Array): Promise<void> {
+  const file = resolveFile(relativePath);
+  if (await existsInSandbox(relativePath)) {
+    throw new Error(`Destination already exists: "${relativePath}"`);
+  }
+  if (!file.parentDirectory.exists) {
+    file.parentDirectory.create({ intermediates: true });
+  }
+  file.create();
+  file.write(bytes);
 }
 
 export async function copyExternalFileIntoSandbox(

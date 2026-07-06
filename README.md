@@ -6,11 +6,16 @@ eingebauten Mini-Browser bedienen – **niemals** das Android-System außerhalb 
 
 ## Projektidee
 
-- Die App ist ein "Mini-Computer" in der App: Datei-Sandbox, Mock-Postfach, WebView-Browser.
-- Ein LLM (beliebige OpenAI-kompatible API) erzeugt aus einer Aufgabe **nur einen JSON-Plan**.
-- Ein Tool-Executor führt den Plan Schritt für Schritt aus.
-- Riskante Aktionen (E-Mail senden, Datei löschen, externe URL öffnen, Formular abschicken,
-  Konto verbinden) erfordern **immer** eine explizite Nutzerbestätigung im Dialog.
+- Die App ist ein "Mini-Computer" in der App: Datei-Sandbox, Gmail/Mock-E-Mail,
+  Google Drive, WebView-Browser.
+- Ein LLM (beliebige OpenAI-kompatible API) entscheidet im Agent-Loop jeweils
+  **einen** JSON-Schritt oder eine finale Antwort.
+- Ein Tool-Executor führt jeden Schritt aus; das Ergebnis geht als Observation
+  zurück ans Modell, danach wird neu geplant.
+- Riskante Aktionen (E-Mail senden, Datei löschen, Drive-Dateien hoch-/
+  herunterladen, verschieben oder in den Papierkorb legen, externe URL öffnen,
+  Formular abschicken, Konto verbinden) erfordern **immer** eine explizite
+  Nutzerbestätigung im Dialog.
 - Alle Dateipfade werden validiert; der Agent kann die App-Sandbox nicht verlassen.
 - User Memory wird lokal in der App gespeichert und ist unabhängig vom jeweils
   ausgewählten KI-Modell.
@@ -67,6 +72,21 @@ Kontext nutzen.
   Bankdaten oder Kreditkartendaten.
 - Embeddings/Vektorsuche sind eine mögliche spätere Erweiterung, aber aktuell
   nicht Teil der Implementierung.
+
+## Agent Loop V2 und Browser
+
+Der Agent-Tab nutzt jetzt einen iterativen Loop:
+`plan -> act -> observe -> replan -> finish`. Nach jedem Tool-Aufruf wird das
+Tool-Ergebnis kompakt in den nächsten Modellkontext gegeben. Browser-Aufgaben
+können dadurch öffnen, warten, lesen, klicken, wieder lesen und dann neu
+entscheiden, statt nur einen statischen Plan abzuarbeiten.
+
+Der Browser ist ausschließlich die interne WebView der App. Der Browser-Tab wird
+beim App-Start gemountet, damit Agent-Tools ohne manuellen Tab-Wechsel
+funktionieren. Die WebView-Navigation erlaubt nur `https:` und internes
+`about:blank`; `javascript:`, `file:`, `intent:`, `market:`, `tel:`, `mailto:`
+und ähnliche Schemes werden blockiert. `screenshot_page` und `download_file`
+sind weiterhin bewusst nicht umgesetzt.
 
 ## Gmail einrichten (OAuth 2.0 mit PKCE)
 
@@ -139,6 +159,29 @@ E-Mail-Tab → **„Gmail verbinden"** → Google-Login im Browser → fertig.
 Der Status zeigt das verbundene Konto; „Test: Inbox suchen" lädt echte
 E-Mails. **„Gmail trennen"** widerruft den Zugriff und löscht die Tokens.
 
+## Google Drive einrichten (OAuth 2.0 mit PKCE)
+
+Die Drive-Verbindung nutzt dieselben Google OAuth-Client-IDs wie Gmail, aber
+einen eigenen TokenStore und den Scope `https://www.googleapis.com/auth/drive`.
+Dieser Scope gibt vollen Zugriff auf Google Drive: Dateien listen, suchen,
+herunterladen/exportieren, Sandbox-Dateien hochladen, verschieben, Ordner
+erstellen, umbenennen und in den Papierkorb legen. Das ist für private
+Test-Apps gewollt; für eine öffentliche Veröffentlichung ist der Scope
+restricted und in der Regel verifizierungspflichtig.
+
+In der Google Cloud Console:
+
+1. **Google Drive API aktivieren:** APIs & Services -> Library -> "Google Drive API" -> Enable.
+2. **OAuth Consent Screen:** Den Scope
+   `https://www.googleapis.com/auth/drive` hinzufügen und die eigene Adresse
+   als Test-User eintragen.
+3. **Client-IDs:** Die Werte in `src/config/googleOAuth.ts` werden gemeinsam
+   von Gmail und Drive genutzt. Kein Client-Secret eintragen.
+
+Zum Testen braucht auch Drive wegen des App-Schemes `androidagent` einen
+Development Build (`npx expo run:android`). Danach im **Drive**-Tab
+**"Drive verbinden"** tippen und mit **"Root-Dateien laden"** prüfen.
+
 ## Architektur (Kurzfassung)
 
 ```
@@ -147,7 +190,8 @@ src/
   screens/           Chat, Agent, Dateien, E-Mail, Browser, Settings
   components/        MessageBubble, PlanStepCard, ConfirmActionModal, Theme
   agent/
-    planner.ts       Aufgabe -> JSON-Plan (LLM), Parsen + Validieren
+    loop/            Agent Loop V2: plan -> act -> observe -> replan (aktiv)
+    planner.ts       Statischer JSON-Planer (eigenständig, nicht in der UI)
     tools/           Tool-Registry (Single Source of Truth) + Handler
     executor/        Tool-Executor + Bestätigungs-Bridge (fail closed)
   services/
@@ -155,15 +199,17 @@ src/
     storage/         Settings (SecureStore/AsyncStorage) + Datei-Sandbox
     memory/          Lokale modellunabhängige User Memory (AsyncStorage)
     email/           Provider-Schicht: Gmail (OAuth/PKCE) + Mock-Fallback
-    browser/         Command-Bridge zwischen Agent und WebView
+    drive/           Google Drive (OAuth/PKCE), Drive API v3, Sandbox-Transfer
+    browser/         Script-Bridge + Browser-Steuerung (WebView, nur https)
   types/             Gemeinsame TypeScript-Typen
   utils/             Pfad-Validierung, JSON-Extraktion
   config/            Konstanten (keine Secrets!)
 ```
 
 Ablauf im Agentic Mode:
-**Aufgabe → Planner (LLM, nur JSON) → Review durch Nutzer → Tool-Executor →
-riskante Schritte: Bestätigungsdialog → Ergebnis pro Schritt sichtbar.**
+**Aufgabe -> Agent Loop (LLM, nur JSON-Entscheidungen) -> Tool-Executor ->
+Observation zurück ans Modell -> Replan -> finale Antwort.** Riskante Schritte
+laufen weiterhin über den Bestätigungsdialog.
 
 ## GitHub einrichten (manuell)
 
@@ -189,6 +235,8 @@ git push -u origin main
 1. Der Agent erzeugt nur JSON-Pläne, nie direkt ausgeführten Code.
 2. Riskante Tools laufen nur nach expliziter Nutzerbestätigung (`ConfirmActionModal`).
 3. Alle Dateioperationen bleiben in `<documentDirectory>/sandbox/` (Pfad-Validierung).
-4. Keine Steuerung des Android-Systems außerhalb der App.
-5. API-Keys niemals im Code – nur verschlüsselt in `expo-secure-store`.
-6. User Memory darf keine Secrets oder sehr sensiblen privaten Informationen enthalten.
+4. Google Drive ist ein verbundener Dienst: Zugriff nur über die Drive-Tools,
+   Tokens nur in `expo-secure-store`, riskante Aktionen mit Bestätigung.
+5. Keine Steuerung des Android-Systems außerhalb der App.
+6. API-Keys niemals im Code – nur verschlüsselt in `expo-secure-store`.
+7. User Memory darf keine Secrets oder sehr sensiblen privaten Informationen enthalten.

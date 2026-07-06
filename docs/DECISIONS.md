@@ -217,3 +217,64 @@ Phrase, Token-Overlap, Tags, Wichtigkeit, Aktualität und `lastUsedAt`.
 - Dedupe verhindert Memory-Spam ohne neue Dependency oder Vektordatenbank.
 - Embeddings/Vektorsuche bleiben eine spätere, bewusst zu entscheidende
   Erweiterung.
+
+## 15. Google Drive als verbundener Dienst mit vollem Drive-Scope (2026-07-05)
+
+**Entscheidung:** Die App bekommt eine eigene Drive-Schicht
+(`services/drive/`) mit Google OAuth 2.0 + PKCE und dem Scope
+`https://www.googleapis.com/auth/drive`. Drive-Tokens liegen separat von Gmail
+in `services/drive/tokenStore.ts` (SecureStore). Der Agent darf Drive-Dateien
+listen, suchen, herunterladen/exportieren, Sandbox-Dateien hochladen,
+verschieben, Ordner erstellen, umbenennen und in den Papierkorb legen.
+
+**Warum:**
+- Der gewünschte Agent soll aktiv mit bestehenden Drive-Dateien arbeiten dürfen,
+  nicht nur mit App-eigenen Dateien. Dafür reicht `drive.file` nicht aus.
+- Der breite Scope ist bewusst riskanter und bleibt deshalb an die vorhandene
+  Sicherheitsarchitektur gekoppelt: alle Drive-Aktionen mit Außenwirkung sind
+  `risky: true` und laufen über `ConfirmActionModal`. Bestätigung bedeutet
+  Freigabe, nicht Verbot.
+- Tokens bleiben gekapselt: Tool-Outputs enthalten nur Dateimetadaten und kurze
+  Erfolgs-/Fehlermeldungen, nie Access- oder Refresh-Tokens.
+- Drive-Downloads in die Sandbox überschreiben nicht still. Bei Zielpfad-
+  Kollisionen wird ein Fehler gemeldet, damit der Agent/Nutzer bewusst einen
+  anderen Pfad wählen kann.
+- Uploads lesen ausschließlich über `sandboxFs.ts` aus der App-Sandbox. Es gibt
+  keinen Drive-Codepfad zu Android-Dateien außerhalb der Sandbox.
+
+**Neue Dependencies:** Keine. Die Umsetzung nutzt vorhandene Expo-Module
+(`expo-auth-session`, `expo-web-browser`, `expo-secure-store`,
+`expo-file-system`) und `expo/fetch`.
+
+## 16. Agent Loop V2 statt statischem Agent-UI-Plan (2026-07-05)
+
+**Entscheidung:** Der Agent-Tab nutzt `src/agent/loop/agentLoop.ts` als
+iterativen Loop: Das Modell entscheidet pro Runde genau einen Tool-Aufruf oder
+eine finale Antwort. Jedes Tool-Ergebnis wird als kompakte Observation in den
+naechsten Modellaufruf gegeben. Der alte statische Planer bleibt als Modul
+erhalten, ist aber nicht mehr der Haupt-Flow im Agent-Tab.
+
+**Warum:**
+- Browser-Aufgaben brauchen `act -> observe -> replan`, weil Seiteninhalt erst
+  nach dem Oeffnen, Klicken, Tippen oder Scrollen sichtbar ist.
+- Riskante Tools laufen weiterhin durch denselben `executeStep()` und damit
+  durch den bestehenden `ConfirmActionModal`.
+- `MAX_AGENT_LOOP_STEPS` begrenzt den Lauf hart; beim Limit antwortet der Loop
+  ehrlich anhand der bisherigen Observations.
+
+## 17. Browser-WebView wird frueh gemountet und blockt Schemes zur Laufzeit (2026-07-05)
+
+**Entscheidung:** Der Browser-Tab wird per `lazy: false` beim App-Start
+gemountet, damit Command-Bus und Script-Bridge fuer Agent-Tools verfuegbar
+sind. Zusaetzlich prueft `BrowserScreen` jede WebView-Navigation mit
+`onShouldStartLoadWithRequest`: erlaubt sind nur `https:` und internes
+`about:blank`.
+
+**Warum:**
+- Der Nutzer soll vor Browser-Agent-Aufgaben nicht manuell erst den Browser-Tab
+  oeffnen muessen.
+- `originWhitelist={['*']}` sorgt dafuer, dass WebView nicht selbst externe
+  Apps/Schemes oeffnet; die App entscheidet zentral und blockiert
+  `javascript:`, `file:`, `intent:`, `market:`, `tel:`, `mailto:` usw.
+- Blockierte Navigation wird im Browser-UI und in `wait_for_page` sichtbar,
+  damit der Agent nach einer geblockten Aktion nicht blind weiterarbeitet.

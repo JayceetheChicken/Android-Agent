@@ -29,7 +29,7 @@ function formatSnapshot(page: browserService.PageSnapshot): string {
       ...page.links.slice(0, 20).map((l) => `  - "${l.text}" -> ${l.href}`),
     );
     if (page.links.length > 20) {
-      lines.push(`  … ${page.links.length - 20} more in data.links`);
+      lines.push(`  ... ${page.links.length - 20} more in data.links`);
     }
   }
   if (page.buttons.length > 0) {
@@ -68,10 +68,11 @@ function formatSnapshot(page: browserService.PageSnapshot): string {
  */
 export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
   open_url: async (params) => {
+    await browserService.ensureBrowserReady();
     const url = browserService.requestOpenUrl(requireString(params, 'url'));
     return {
       ok: true,
-      output: `Opening "${url}" in the mini browser. Use wait_for_page, then read_page.`,
+      output: `Opening "${url}" in the mini browser. Next: wait_for_page, then read_page.`,
     };
   },
 
@@ -85,7 +86,7 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
     const result = await browserService.clickElement(selector);
     return {
       ok: true,
-      output: `Clicked <${result.tag}> "${result.clicked}". Use read_page to see the result.`,
+      output: `Clicked <${result.tag}> "${result.clicked}". Next: wait_for_page, then read_page.`,
       data: result,
     };
   },
@@ -108,8 +109,8 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
       ok: true,
       output:
         result.submitted === 'form'
-          ? `Submitted form (action: ${result.action ?? 'unknown'}). Use wait_for_page, then read_page.`
-          : `No form matched – sent Enter key to the focused <${result.target ?? 'input'}>.`,
+          ? `Submitted form (action: ${result.action ?? 'unknown'}). Next: wait_for_page, then read_page.`
+          : `No form matched - sent Enter key to the focused <${result.target ?? 'input'}>. Next: wait_for_page, then read_page.`,
       data: result,
     };
   },
@@ -130,16 +131,24 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
   wait_for_page: async (params) => {
     const ms = optionalNumber(params, 'ms');
     const result = await browserService.waitForPage(ms);
+    const blocked =
+      result.lastBlockedUrl && result.lastBlockedReason
+        ? ` Last blocked navigation: ${result.lastBlockedUrl} (${result.lastBlockedReason})`
+        : '';
     return {
       ok: true,
-      output: `Page state after waiting: ${result.readyState} – ${result.url}${result.title ? ` ("${result.title}")` : ''}`,
+      output: `Page state after waiting: ${result.readyState} - ${result.url}${result.title ? ` ("${result.title}")` : ''}.${blocked}`,
       data: result,
     };
   },
 
   go_back: async () => {
+    await browserService.ensureBrowserReady();
     browserService.requestGoBack();
-    return { ok: true, output: 'Navigated back in the mini browser.' };
+    return {
+      ok: true,
+      output: 'Navigated back in the mini browser. Next: wait_for_page, then read_page.',
+    };
   },
 
   screenshot_page: async () => notImplemented('screenshot_page'),

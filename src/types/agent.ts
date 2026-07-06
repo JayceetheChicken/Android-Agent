@@ -35,3 +35,34 @@ export interface ConfirmationRequest {
   /** Human-readable description of what is about to happen. */
   description: string;
 }
+
+// ---------------------------------------------------------------- Agent Loop V2
+
+/** One tool result the model gets to observe before deciding the next step. */
+export interface AgentObservation {
+  tool: ToolName;
+  ok: boolean;
+  output: string;
+  data?: unknown;
+}
+
+/** The model's decision for the next iteration: run one tool, or finish. */
+export type AgentLoopDecision =
+  | { type: 'tool'; tool: ToolName; params: ToolParams; reason: string }
+  | { type: 'final'; answer: string };
+
+/** Rolling state the loop carries across iterations. */
+export interface AgentLoopState {
+  userTask: string;
+  observations: AgentObservation[];
+  stepsRun: number;
+}
+
+export type AgentLoopStopReason = 'final' | 'limit' | 'error';
+
+export interface AgentLoopResult {
+  answer: string;
+  stepsRun: number;
+  observations: AgentObservation[];
+  stoppedReason: AgentLoopStopReason;
+}

@@ -15,8 +15,11 @@ export const STORAGE_KEYS = {
   userMemory: 'user_memory',
 } as const;
 
-/** Hard limit so a single plan can never run away. */
+/** Hard limit so a single static plan can never run away. */
 export const MAX_PLAN_STEPS = 10;
+
+/** Hard limit for the iterative agent loop (plan → act → observe → replan). */
+export const MAX_AGENT_LOOP_STEPS = 12;
 
 /** The mini browser only opens these protocols. */
 export const ALLOWED_URL_PROTOCOLS = ['https:'] as const;

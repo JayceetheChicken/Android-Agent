@@ -47,6 +47,18 @@ export function BrowserScreen(): React.JSX.Element {
     browserService.handleBridgeMessage(event.nativeEvent.data);
   }, []);
 
+  // Hard navigation guard: only https (and internal about:blank) may load.
+  // Blocks javascript:, file:, intent:, market:, tel:, mailto: etc. so the
+  // agent cannot break out of the sandbox into external Android intents.
+  const onShouldStartLoadWithRequest = useCallback((request: { url: string }): boolean => {
+    const decision = browserService.validateNavigationUrl(request.url);
+    if (!decision.allowed) {
+      browserService.reportBlockedNavigation(request.url, decision.reason ?? 'blocked');
+      setError(decision.reason ?? `Blockiert: ${request.url}`);
+    }
+    return decision.allowed;
+  }, []);
+
   const go = useCallback(() => {
     try {
       const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(urlInput.trim())
@@ -104,6 +116,8 @@ export function BrowserScreen(): React.JSX.Element {
         style={styles.webview}
         onNavigationStateChange={onNavigationStateChange}
         onMessage={onMessage}
+        onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+        originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled
         setSupportMultipleWindows={false}

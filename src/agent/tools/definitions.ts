@@ -152,6 +152,117 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     mock: false,
   },
 
+  // ---- Google Drive (real, OAuth/PKCE, Drive API v3) ----
+  {
+    name: 'connect_drive_account',
+    category: 'drive',
+    description:
+      'Connect Google Drive via Google login (OAuth/PKCE, full drive scope). Requires user confirmation.',
+    params: {},
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_get_status',
+    category: 'drive',
+    description: 'Show whether Google Drive is connected and which account is active.',
+    params: {},
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'drive_list_files',
+    category: 'drive',
+    description: 'List files and folders in a Google Drive folder.',
+    params: {
+      folder_id: 'string - optional Drive folder id, default "root"',
+      page_size: 'number - optional result limit, default 25, max 100',
+    },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'drive_search_files',
+    category: 'drive',
+    description:
+      'Search Google Drive files by name/full text. Supports tokens like mimeType:application/pdf, type:folder, trashed:false.',
+    params: {
+      query: 'string - search text or simple filters',
+      page_size: 'number - optional result limit, default 25, max 100',
+    },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'drive_download_to_sandbox',
+    category: 'drive',
+    description:
+      'Download a Google Drive file into the app sandbox. Google Docs/Sheets/Slides are exported. Requires user confirmation.',
+    params: {
+      file_id: 'string - Drive file id',
+      sandbox_path: 'string - target path relative to sandbox root; must not already exist',
+      export_mime_type: 'string - optional export MIME type for Google Workspace files, default application/pdf',
+    },
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_upload_from_sandbox',
+    category: 'drive',
+    description:
+      'Upload a file from the app sandbox to Google Drive. Never reads files outside the sandbox. Requires user confirmation.',
+    params: {
+      sandbox_path: 'string - source file path relative to sandbox root',
+      drive_folder_id: 'string - optional target Drive folder id, default "root"',
+      name: 'string - optional Drive file name, default source file name',
+      mime_type: 'string - optional MIME type, guessed when omitted',
+    },
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_move_file',
+    category: 'drive',
+    description: 'Move a Google Drive file into another Drive folder. Requires user confirmation.',
+    params: {
+      file_id: 'string - Drive file id',
+      target_folder_id: 'string - Drive folder id to move into',
+    },
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_create_folder',
+    category: 'drive',
+    description: 'Create a folder in Google Drive. Requires user confirmation.',
+    params: {
+      name: 'string - folder name',
+      parent_folder_id: 'string - optional parent Drive folder id, default "root"',
+    },
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_trash_file',
+    category: 'drive',
+    description:
+      'Move a Google Drive file or folder to the trash. This does not permanently delete it. Requires user confirmation.',
+    params: { file_id: 'string - Drive file id' },
+    risky: true,
+    mock: false,
+  },
+  {
+    name: 'drive_rename_file',
+    category: 'drive',
+    description: 'Rename a Google Drive file or folder. Requires user confirmation.',
+    params: {
+      file_id: 'string - Drive file id',
+      new_name: 'string - new Drive file name',
+    },
+    risky: true,
+    mock: false,
+  },
+
   // ---- Browser (in-app WebView, controlled via the script bridge) ----
   {
     name: 'open_url',
@@ -297,4 +408,20 @@ export function getToolDefinition(name: string): ToolDefinition | undefined {
 
 export function isToolName(name: string): name is ToolName {
   return definitionsByName.has(name as ToolName);
+}
+
+/**
+ * Human-readable tool catalogue for LLM prompts. Shared by the static planner
+ * and the Agent Loop, so both always describe exactly the registered tools.
+ */
+export function describeToolsForPrompt(): string {
+  return TOOL_DEFINITIONS.map((tool) => {
+    const params =
+      Object.keys(tool.params).length > 0
+        ? Object.entries(tool.params)
+            .map(([key, doc]) => `      - ${key}: ${doc}`)
+            .join('\n')
+        : '      (no parameters)';
+    return `  - ${tool.name} (${tool.category}${tool.risky ? ', RISKY – needs user confirmation' : ''})\n    ${tool.description}\n    params:\n${params}`;
+  }).join('\n');
 }

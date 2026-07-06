@@ -18,7 +18,8 @@ Services (services/)
   ai/openaiClient   POST {baseUrl}/chat/completions
   storage/          SecureStore (API-Key), AsyncStorage (Settings), Datei-Sandbox, Import
   memory/           Lokale modellunabhängige User Memory (AsyncStorage)
-  email/            Mock-Postfach (API-kompatibel zu späterer echter Integration)
+  email/            Gmail/Mock-Provider-Schicht
+  drive/            Google Drive (OAuth/PKCE, Drive API v3)
   browser/          Command-Bridge zur WebView
 ```
 
@@ -31,7 +32,7 @@ Beide treffen sich nur im Tool-Executor und in der Bestätigungs-Bridge.
 | --- | --- |
 | `App.tsx` (Root) | Re-Export von `src/main/App.tsx` (Expo-Konvention) |
 | `src/main/App.tsx` | NavigationContainer, Theme, SafeArea |
-| `src/main/navigation.tsx` | Bottom-Tabs: Chat, Agent, Dateien, E-Mail, Browser, Settings |
+| `src/main/navigation.tsx` | Bottom-Tabs: Chat, Agent, Dateien, Drive, E-Mail, Browser, Settings |
 | `src/screens/*` | Ein Screen pro Modul, keine Business-Logik in Screens außer UI-State |
 | `src/components/*` | Wiederverwendbare UI: `MessageBubble`, `PlanStepCard`, `ConfirmActionModal`, `theme.ts` |
 | `src/types/*` | Alle geteilten Typen; `types/tools.ts` definiert die Tool-Namen als Const-Arrays |
@@ -50,23 +51,52 @@ zusätzlicher Kontext geladen, wenn sie relevant ist.
 Merk-/Speicher-Formulierungen lokal und deterministisch; der Chat bekommt
 dadurch nicht das komplette Agent-Tool-System.
 
-## Agentic Mode
+## Agentic Mode – Agent Loop V2
 
-Ablauf (siehe `src/screens/AgentScreen.tsx`):
+`AgentScreen` nutzt den **iterativen Agent-Loop** (`src/agent/loop/`):
+`plan → act → observe → replan → … → finish`. Der Agent führt nicht mehr einen
+großen statischen Plan aus, sondern entscheidet nach jedem Tool-Ergebnis neu.
+
+Ablauf (siehe `src/agent/loop/agentLoop.ts`):
 
 1. **Aufgabe eingeben** – freier Text.
-2. **Planen** – `agent/planner.ts` schickt System-Prompt + Aufgabe an die API.
-   Der System-Prompt wird aus der Tool-Registry generiert (`describeTools()`),
-   dadurch können Prompt und Executor nie auseinanderlaufen.
-3. **Parsen & Validieren** – `parsePlan()` akzeptiert nur:
-   - ein JSON-Objekt mit `goal: string` und `steps: []`
-   - bekannte Tool-Namen (`isToolName`)
-   - maximal `MAX_PLAN_STEPS` (10) Schritte
-   Alles andere wird mit Fehlermeldung abgelehnt – **nichts wird ausgeführt**.
-4. **Review** – der Nutzer sieht alle Schritte (Tool, Parameter, Begründung)
-   und startet die Ausführung explizit.
-5. **Ausführung** – Schritt für Schritt über den Tool-Executor; Status und
-   Ergebnis jedes Schritts sind live sichtbar.
+2. **Kontext einmal laden** – `getRelevantMemoryContext(task)` wird **einmal**
+   am Anfang geladen; danach treiben die Observations die weiteren Iterationen.
+3. **Einen Schritt planen** – `loopPlanner.buildLoopSystemPrompt()` (aus der
+   Tool-Registry generiert) + Aufgabe + bisherige Observations. Das Modell gibt
+   **genau eine** Entscheidung als JSON zurück:
+   `{ "type": "tool", "tool", "params", "reason" }` oder `{ "type": "final", "answer" }`.
+4. **Parsen & Validieren** – `parseLoopDecision()` akzeptiert nur bekannte Tools
+   bzw. eine nicht-leere finale Antwort. Bei ungültigem JSON gibt es **eine**
+   Korrektur-Runde, sonst Fehler. LLM-Output ist immer Daten, nie Code.
+5. **Ausführen** – über **denselben** `executeStep()` wie der statische Planer:
+   riskante Tools (`open_url`, `submit_form`, `send_email`, …) durchlaufen weiter
+   den `ConfirmActionModal` (fail closed).
+6. **Beobachten** – das Tool-Ergebnis (`ok`, `output`, `data`) wird als
+   Observation gespeichert und im nächsten Prompt kompakt zurückgegeben
+   (`buildObservationsMessage`, jede Ausgabe auf ~1800 Zeichen gekürzt, keine
+   riesigen JSON-Dumps).
+7. **Wiederholen** bis `type: "final"` oder bis `MAX_AGENT_LOOP_STEPS` (12).
+   Beim Limit erzeugt der Loop eine **ehrliche** Zwischenantwort aus den
+   Observations statt einfach abzubrechen.
+
+Die UI zeigt jedes Tool (Name, Grund, Ergebnis) live und am Ende die finale
+Antwort. Der alte statische Planer (`src/agent/planner.ts`, `parsePlan`,
+`MAX_PLAN_STEPS`) bleibt als eigenständiges Modul erhalten (u. a. für Tests),
+wird von der UI aber nicht mehr genutzt.
+
+### Browser-Verfügbarkeit im Agentic Mode
+
+Der Browser-Tab wird über `lazy: false` (`src/main/navigation.tsx`) **beim
+App-Start gemountet**. Damit sind Command-Bus und Script-Bridge sofort bereit –
+der Nutzer muss den Browser-Tab nicht erst manuell öffnen. Die WebView läuft
+auch im Hintergrund (während der Nutzer auf dem Agent-Tab die Schrittliste
+verfolgt); man kann jederzeit auf den Browser-Tab wechseln und zusehen.
+`browserService.ensureBrowserReady()` wartet zur Sicherheit kurz auf die
+WebView-Initialisierung und liefert sonst eine klare Fehlermeldung, statt
+still zu hängen. Weil Bottom-Tabs nach dem Mounten mounted bleiben, funktioniert
+auch der `ConfirmActionModal` (von `AgentScreen` gerendert) unabhängig davon,
+welcher Tab gerade vorne ist.
 
 ## Tool-Executor
 
@@ -86,7 +116,9 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
 
 ### Riskante Tools (Stand jetzt)
 
-`delete_file`, `connect_email_account`, `send_email`, `open_url`,
+`delete_file`, `connect_email_account`, `send_email`, `connect_drive_account`,
+`drive_download_to_sandbox`, `drive_upload_from_sandbox`, `drive_move_file`,
+`drive_create_folder`, `drive_trash_file`, `drive_rename_file`, `open_url`,
 `submit_form`, `download_file`.
 
 ## Sicherheitsmodell
@@ -106,6 +138,11 @@ UI: `AgentScreen` registriert beim Mounten einen Handler, der das
   Speicher und Netzwerkzugriff.
 - **Secrets:** API-Key nur in `expo-secure-store` (verschlüsselter Keystore),
   nie in Code, Config, Logs oder der Datei-Sandbox.
+- **Google Drive als verbundener Dienst:** Der Agent darf nach OAuth-Verbindung
+  aktiv Drive-Dateien listen, suchen, herunterladen/exportieren, Sandbox-Dateien
+  hochladen, Dateien verschieben, Ordner erstellen, umbenennen und Dateien in
+  den Papierkorb legen. Diese Aktionen laufen ausschließlich über die
+  Drive-Tools; alle riskanten Drive-Tools bleiben bestätigungspflichtig.
 - **User Memory ohne Secrets:** Lokale Memories dürfen keine Passwörter,
   API-Keys, OAuth-Tokens, Bankdaten, Kreditkartendaten oder sehr sensible
   private Informationen enthalten. Der Nutzer kann sie im Settings-Tab sehen
@@ -150,8 +187,9 @@ Originaldateien auf dem Gerät bleiben unverändert.
 
 - Wurzel: `<documentDirectory>/sandbox/` (privater App-Speicher, wird beim
   ersten Zugriff angelegt).
-- API: `listEntries`, `readTextFile`, `writeTextFile`, `createFolder`,
-  `deleteEntry`, `moveEntry`, `renameEntry` – alles in
+- API: `listEntries`, `readTextFile`, `writeTextFile`, `readBinaryFile`,
+  `writeBinaryFile`, `getFileInfo`, `createFolder`, `deleteEntry`,
+  `moveEntry`, `renameEntry` – alles in
   `services/storage/sandboxFs.ts`, alles nach Pfad-Validierung.
 - Der Dateien-Tab und die Agent-Datei-Tools nutzen exakt dieselbe API, der
   Nutzer sieht also sofort, was der Agent getan hat.
@@ -160,6 +198,10 @@ Originaldateien auf dem Gerät bleiben unverändert.
   `sanitizeSandboxPath()`.
 - Bei Namenskollisionen wählt `importService.ts` automatisch einen freien Namen
   wie `datei (1).txt` statt zu überschreiben.
+- Drive-Downloads in die Sandbox überschreiben dagegen nicht automatisch:
+  `drive_download_to_sandbox` erwartet einen freien Zielpfad und meldet bei
+  Kollision einen Fehler. So bleibt der vom Agenten geplante Zielpfad
+  eindeutig und der Nutzer sieht unerwartete Konflikte.
 - Der Agent bekommt kein Tool, um den Android-Speicher zu durchsuchen oder den
   Picker automatisch zu öffnen. Nach dem Import arbeitet er ausschließlich mit
   der Sandbox-Kopie.
@@ -228,6 +270,48 @@ enthalten nur Mail-Metadaten/-Inhalte, nie Credentials.
   Noch nicht implementiert – aktuell bestätigt jede riskante Aktion
   (TODO-Anker in `toolExecutor.ts`).
 
+## Google-Drive-Schicht (implementiert)
+
+```
+Agent-Tool (driveTools.ts)          DriveScreen
+        │                                │
+        └────────────┬───────────────────┘
+                     ▼
+        services/drive/driveService.ts   ← einziger Einstiegspunkt
+                     │
+                     ▼
+        providers/googleDriveProvider.ts
+          ├── services/google/oauth.ts   (OAuth 2.0 + PKCE)
+          ├── services/drive/tokenStore.ts (Tokens NUR SecureStore)
+          └── services/storage/sandboxFs.ts (validierte Sandbox-Transfers)
+```
+
+- **Scope:** `https://www.googleapis.com/auth/drive`. Das ist bewusst breit:
+  Der Agent darf nach Nutzerverbindung bestehende Drive-Dateien verwalten, nicht
+  nur App-eigene Dateien.
+- **Tools:** `connect_drive_account`, `drive_get_status`, `drive_list_files`,
+  `drive_search_files`, `drive_download_to_sandbox`,
+  `drive_upload_from_sandbox`, `drive_move_file`, `drive_create_folder`,
+  `drive_trash_file`, `drive_rename_file`.
+- **Bestätigung:** Alle Drive-Aktionen mit Außenwirkung oder Datenänderung sind
+  `risky: true` und laufen über `ConfirmActionModal`. `risky` bedeutet hier
+  Freigabe durch den Nutzer, kein Verbot.
+- **Tokens:** Drive-Tokens liegen separat von Gmail in
+  `services/drive/tokenStore.ts` und verlassen den Provider nicht. Tool-Outputs
+  enthalten nur Metadaten wie ID, Name, MIME-Type, Größe, Parents und
+  Papierkorbstatus.
+- **Download:** Normale Dateien laufen über `files.get?alt=media`; Google
+  Docs/Sheets/Slides über `files.export` (Standard `application/pdf`, optional
+  überschreibbar). Zielpfade gehen durch `sandboxFs.writeBinaryFile()` und
+  dürfen nicht existieren.
+- **Upload:** `drive_upload_from_sandbox` liest ausschließlich über
+  `sandboxFs.readBinaryFile()` aus `<documentDirectory>/sandbox/` und nutzt den
+  Drive-Multipart-Upload-Endpunkt.
+- **Verschieben:** `drive_move_file` liest zuerst die aktuellen Parents und
+  nutzt `files.update` mit `addParents` und `removeParents`.
+- **Papierkorb:** `drive_trash_file` setzt nur `trashed: true`; permanentes
+  Löschen ist nicht Teil des MVP.
+
 ## Browser-Control-Layer (implementiert)
 
 `services/browser/browserService.ts` hat zwei Kanäle:
@@ -255,13 +339,18 @@ Sicherheitsgrenzen des Browsers:
   injiziert – nur die festen Templates, Argumente via `JSON.stringify`.
 - `open_url` (externe Seite) und `submit_form` (rechtlich/sicherheitsrelevant:
   Logins, Käufe, Kündigungen) bleiben `risky` → ConfirmActionModal.
-- Kein Auto-Ausfüllen von Passwortfeldern (`type_text` bricht ab).
+- Kein Auto-Ausfüllen von Passwortfeldern oder secret-artigen Strings
+  (`type_text` bricht ab).
+- `BrowserScreen` nutzt `onShouldStartLoadWithRequest` mit
+  `browserService.validateNavigationUrl()`. Erlaubt sind nur `https:` und das
+  interne `about:blank`; `javascript:`, `file:`, `intent:`, `market:`, `tel:`,
+  `mailto:` usw. werden geblockt. Die letzte geblockte URL wird im UI und über
+  `wait_for_page` sichtbar, damit der Agent nicht blind weiterplant.
 
 Noch offen (siehe TASKS.md):
 - `screenshot_page`: `react-native-view-shot` (neue Dependency, erst dann
   hinzufügen, wenn wirklich gebraucht – siehe DECISIONS.md).
 - `download_file`: `File.downloadFileAsync` aus `expo-file-system`,
   Ziel **immer** über `sanitizeSandboxPath` validieren.
-- Agent-Loop V2 (`act → observe → replan`) setzt auf `read_page`/
-  `wait_for_page` auf; die Tool-Ergebnisse sind dafür bereits strukturiert
-  (`data`-Feld mit `PageSnapshot`).
+- YouTube-Transcript-Spezialtool (auf `read_page`/Bridge aufbauend).
+- Domain-Allowlist/Blocklist über `https:` hinaus.

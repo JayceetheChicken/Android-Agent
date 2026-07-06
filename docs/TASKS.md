@@ -25,11 +25,14 @@
 
 - [x] `read_page` echt: sichtbarer Text, Headings, Links, Buttons, Inputs per
       WebView-JS-Injection (2026-07-05)
-- [ ] Agent-Loop V2: Tool-Ergebnisse zurück ans LLM (plan → act → observe → replan)
+- [x] Agent-Loop V2: iterativ plan → act → observe → replan → finish
+      (`src/agent/loop/`, max. 12 Schritte, Observations zurück ans Modell,
+      ehrliche Zwischenantwort beim Limit) (2026-07-05)
 - [ ] Chat-Verlauf und Agent-Läufe persistieren (AsyncStorage)
 - [ ] Memory-Relevanz später optional mit Embeddings/Vektorsuche verbessern
       (keine neue Dependency im aktuellen einfachen Stand)
-- [ ] Fehler-Retry im Planner (ungültiges JSON → eine Korrektur-Runde)
+- [x] Fehler-Retry bei ungültigem JSON: eine Korrektur-Runde im Agent-Loop
+      (`decideNextStep`) (2026-07-05)
 - [ ] Settings: "Verbindung testen"-Button
 - [ ] Datei-Editor im Dateien-Tab (Textdatei bearbeiten, nicht nur ansehen)
 - [ ] Safe Mode / Full Access Mode für `write_file`: Überschreiben bestehender
@@ -42,16 +45,20 @@
 - [x] `click_element`: CSS-Selektor zuerst, Fallback auf sichtbaren Text
       (Links, Buttons, role=button, summary, label, onclick)
 - [x] `type_text`: Input/Textarea/contenteditable mit input+change-Events;
-      verweigert Passwortfelder
+      verweigert Passwortfelder UND secret-artige Eingaben (API-Keys/Tokens)
 - [x] `submit_form`: requestSubmit/submit, Fallback Enter-Key auf fokussiertem
       Input; bleibt `risky` (Bestätigungspflicht)
 - [x] `scroll_page` (up/down, ca. eine Bildschirmhöhe)
 - [x] `wait_for_page` (100–10000 ms, meldet readyState/URL/Titel)
+- [x] Browser-Tab automatisch verfügbar: `lazy: false` mountet die WebView beim
+      App-Start; `ensureBrowserReady()` als Sicherheitsnetz (2026-07-05)
+- [x] WebView-Navigation gehärtet: `onShouldStartLoadWithRequest` +
+      `validateNavigationUrl` erlauben nur https/about:blank, blocken
+      javascript:/file:/intent:/market:/tel:/mailto: (2026-07-05)
 - [ ] YouTube-Transcript-Spezialtool (auf read_page/Bridge aufbauend)
 - [ ] `download_file` mit `File.downloadFileAsync` in die Sandbox (Pfad validiert, bestätigungspflichtig)
 - [ ] `screenshot_page` (benötigt neue Dependency, vorher in DECISIONS.md begründen)
-- [ ] Domain-Allowlist/Blocklist für den Mini-Browser
-- [ ] Browser-Tab automatisch fokussieren, wenn der Agent Browser-Tools nutzt
+- [ ] Domain-Allowlist/Blocklist für den Mini-Browser (über https hinaus)
 
 ## Meilenstein 4 – Echte E-Mail (Gmail) – Kern fertig 2026-07-05
 
@@ -66,6 +73,25 @@
       (Testing-Status: 7 Tage), Nutzer aktiv zum Re-Login auffordern
 - [ ] Suche: Gmail-Query-Syntax (`from:`, `label:`, `newer_than:`) im Planner-Prompt dokumentieren
 - [ ] Pagination für mehr als 15 Suchergebnisse
+
+## Meilenstein 4b – Google Drive – Kern fertig 2026-07-05
+
+- [x] Gemeinsame Google-OAuth-Hilfe für frei übergebene Scopes
+      (`services/google/oauth.ts`), Gmail weiterhin kompatibel
+- [x] Drive-Service-Schicht (`services/drive/driveService.ts`,
+      `providers/googleDriveProvider.ts`, `tokenStore.ts`, `types.ts`)
+- [x] Drive OAuth 2.0 + PKCE mit Scope `https://www.googleapis.com/auth/drive`,
+      Tokens nur in SecureStore
+- [x] Agent-Tools: verbinden, Status, listen, suchen, Download in Sandbox,
+      Upload aus Sandbox, verschieben, Ordner erstellen, Papierkorb, umbenennen
+- [x] Risky-Flags für alle Drive-Aktionen mit Außenwirkung; `drive_get_status`,
+      `drive_list_files`, `drive_search_files` bleiben ohne Bestätigung
+- [x] Sandbox-Binärzugriff ergänzt (`readBinaryFile`, `writeBinaryFile`,
+      `getFileInfo`); Drive-Downloads überschreiben bei Namenskollision nicht
+- [x] DriveScreen mit Status, Verbinden/Trennen und Root-Dateien-Test
+- [x] README/ARCHITECTURE/DECISIONS aktualisiert
+- [ ] Auf echtem Android-Development-Build mit eingetragenen Google-Client-IDs
+      gegen ein echtes Drive-Konto testen
 
 ## Meilenstein 5 – Full Access Mode
 
