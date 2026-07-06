@@ -314,11 +314,16 @@ Agent-Tool (driveTools.ts)          DriveScreen
 
 ## Browser-Control-Layer (implementiert)
 
-`services/browser/browserService.ts` hat zwei Kanäle:
+`services/browser/browserService.ts` hat drei Kanäle:
 
 1. **Command-Bus** (`open_url`, `go_back`): fire-and-forget; der Browser-Tab
    abonniert und wendet die Kommandos auf seine WebView an.
-2. **Script-Bridge** (Promise-basiert): `executeScript()` erzeugt pro Befehl
+2. **Native WebView-State:** `BrowserScreen` meldet `onLoadStart`,
+   `onLoadEnd`, `onError`, `onHttpError`, `onNavigationStateChange` und
+   geblockte Navigation in den Service. `wait_for_page` und
+   `browser_get_state` lesen diesen State ohne JavaScript-Injection und
+   koennen deshalb auch waehrend langer Ladevorgaenge antworten.
+3. **Script-Bridge** (Promise-basiert): `executeScript()` erzeugt pro Befehl
    eine eindeutige Request-ID, baut aus **festen Skript-Templates** das
    Seiten-Skript, der Screen injiziert es per `injectJavaScript`, die Seite
    antwortet über `window.ReactNativeWebView.postMessage`, und
@@ -331,7 +336,8 @@ Headings/Links/Buttons/Inputs je max. 50, unsichtbare Elemente gefiltert),
 `clickElement()` (CSS-Selektor, Fallback sichtbarer Text), `typeText()`
 (input/change-Events, **verweigert Passwortfelder**), `submitForm()`
 (requestSubmit, Fallback Enter-Key; Tool bleibt bestätigungspflichtig),
-`scrollPage()`, `waitForPage()`.
+`scrollPage()`, `waitForPage()` (native State, keine JS-Injection),
+`browser_get_state` und `stop_loading`.
 
 Sicherheitsgrenzen des Browsers:
 - Die WebView ist der einzige Ort, an dem DOM-Aktionen laufen; Agent-Tools

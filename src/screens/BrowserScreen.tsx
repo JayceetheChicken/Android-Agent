@@ -10,6 +10,17 @@ import { colors, spacing } from '../components/theme';
 import { BROWSER_HOME_URL } from '../config/constants';
 import * as browserService from '../services/browser/browserService';
 
+type BrowserNativeEvent = {
+  nativeEvent: {
+    url: string;
+    title: string;
+    canGoBack: boolean;
+    description?: string;
+    code?: number;
+    statusCode?: number;
+  };
+};
+
 /**
  * Mini browser (WebView). The agent controls it indirectly through
  * browserService commands and the script bridge; this screen is the only
@@ -31,6 +42,9 @@ export function BrowserScreen(): React.JSX.Element {
         setError(null);
       } else if (command.type === 'go_back') {
         webViewRef.current?.goBack();
+      } else if (command.type === 'stop_loading') {
+        webViewRef.current?.stopLoading();
+        browserService.reportLoadEnd();
       }
     });
   }, []);
@@ -85,6 +99,47 @@ export function BrowserScreen(): React.JSX.Element {
     });
   }, []);
 
+  const onLoadStart = useCallback((event: BrowserNativeEvent) => {
+    const nav = event.nativeEvent;
+    browserService.reportLoadStart({
+      currentUrl: nav.url,
+      currentTitle: nav.title,
+      canGoBack: nav.canGoBack,
+    });
+    setError(null);
+  }, []);
+
+  const onLoadEnd = useCallback((event: BrowserNativeEvent) => {
+    const nav = event.nativeEvent;
+    browserService.reportLoadEnd({
+      currentUrl: nav.url,
+      currentTitle: nav.title,
+      canGoBack: nav.canGoBack,
+    });
+  }, []);
+
+  const onError = useCallback((event: BrowserNativeEvent) => {
+    const nav = event.nativeEvent;
+    const message = `${nav.description ?? 'WebView load failed'}${nav.code ? ` (code ${nav.code})` : ''}`;
+    browserService.reportLoadError(message, {
+      currentUrl: nav.url,
+      currentTitle: nav.title,
+      canGoBack: nav.canGoBack,
+    });
+    setError(message);
+  }, []);
+
+  const onHttpError = useCallback((event: BrowserNativeEvent) => {
+    const nav = event.nativeEvent;
+    const message = `HTTP ${nav.statusCode ?? 'error'}: ${nav.description ?? 'WebView HTTP error'}`;
+    browserService.reportHttpError(message, {
+      currentUrl: nav.url,
+      currentTitle: nav.title,
+      canGoBack: nav.canGoBack,
+    });
+    setError(message);
+  }, []);
+
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
@@ -115,6 +170,10 @@ export function BrowserScreen(): React.JSX.Element {
         source={{ uri: currentUrl }}
         style={styles.webview}
         onNavigationStateChange={onNavigationStateChange}
+        onLoadStart={onLoadStart}
+        onLoadEnd={onLoadEnd}
+        onError={onError}
+        onHttpError={onHttpError}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
         originWhitelist={['*']}

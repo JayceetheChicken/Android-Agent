@@ -18,12 +18,20 @@ import { generateId } from '../../utils/json';
  * are embedded via JSON.stringify, so no free-form/user code is ever injected.
  */
 
-export type BrowserCommand = { type: 'open_url'; url: string } | { type: 'go_back' };
+export type BrowserCommand =
+  | { type: 'open_url'; url: string }
+  | { type: 'go_back' }
+  | { type: 'stop_loading' };
 
 export interface BrowserState {
   currentUrl: string;
   currentTitle: string;
   canGoBack: boolean;
+  loading: boolean;
+  lastLoadStartedAt?: number;
+  lastLoadFinishedAt?: number;
+  lastError?: string;
+  lastHttpError?: string;
   /** Last navigation that was blocked by the protocol allowlist (if any). */
   lastBlockedUrl?: string;
   lastBlockedReason?: string;
@@ -57,13 +65,14 @@ interface PendingRequest {
 }
 
 const DEFAULT_TIMEOUT_MS = 6000;
-const READ_PAGE_TIMEOUT_MS = 10000;
+const READ_PAGE_TIMEOUT_MS = 15000;
 const READY_TIMEOUT_MS = 4000;
 
 const state: BrowserState = {
   currentUrl: BROWSER_HOME_URL,
   currentTitle: '',
   canGoBack: false,
+  loading: false,
 };
 
 const listeners = new Set<Listener>();
@@ -166,9 +175,48 @@ export function requestGoBack(): void {
   emit({ type: 'go_back' });
 }
 
+/** Called by the stop_loading tool. */
+export function requestStopLoading(): void {
+  emit({ type: 'stop_loading' });
+}
+
 /** Called by the Browser screen on navigation changes. */
 export function reportNavigation(update: Partial<BrowserState>): void {
   Object.assign(state, update);
+}
+
+export function reportLoadStart(update: Partial<BrowserState> = {}): void {
+  Object.assign(state, {
+    ...update,
+    loading: true,
+    lastLoadStartedAt: Date.now(),
+    lastError: undefined,
+    lastHttpError: undefined,
+  });
+}
+
+export function reportLoadEnd(update: Partial<BrowserState> = {}): void {
+  Object.assign(state, {
+    ...update,
+    loading: false,
+    lastLoadFinishedAt: Date.now(),
+  });
+}
+
+export function reportLoadError(error: string, update: Partial<BrowserState> = {}): void {
+  Object.assign(state, {
+    ...update,
+    loading: false,
+    lastLoadFinishedAt: Date.now(),
+    lastError: error,
+  });
+}
+
+export function reportHttpError(error: string, update: Partial<BrowserState> = {}): void {
+  Object.assign(state, {
+    ...update,
+    lastHttpError: error,
+  });
 }
 
 /** Called by the Browser screen when it blocks a non-https navigation. */
@@ -179,6 +227,21 @@ export function reportBlockedNavigation(url: string, reason: string): void {
 
 export function getState(): BrowserState {
   return { ...state };
+}
+
+function formatStateForError(current: BrowserState): string {
+  return [
+    `currentUrl=${current.currentUrl || '(unknown)'}`,
+    `loading=${current.loading ? 'true' : 'false'}`,
+    current.currentTitle ? `title="${current.currentTitle}"` : null,
+    current.lastError ? `lastError="${current.lastError}"` : null,
+    current.lastHttpError ? `lastHttpError="${current.lastHttpError}"` : null,
+    current.lastBlockedUrl
+      ? `lastBlocked="${current.lastBlockedUrl}" (${current.lastBlockedReason ?? 'blocked'})`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 // ----------------------------------------------------------- script bridge
@@ -411,9 +474,6 @@ return {scrollY:Math.max(0,Math.round(window.scrollY+delta)),pageHeight:Math.rou
 `;
 }
 
-const PAGE_STATUS_SCRIPT =
-  'return {readyState:document.readyState,url:location.href,title:document.title};';
-
 // ------------------------------------------------------- public browser API
 
 interface RawSnapshot {
@@ -428,7 +488,18 @@ interface RawSnapshot {
 
 /** Structured snapshot of the current page (visible content only, capped). */
 export async function readPage(): Promise<PageSnapshot> {
-  const raw = await executeScript<RawSnapshot>(READ_PAGE_SCRIPT, READ_PAGE_TIMEOUT_MS);
+  await ensureBrowserReady();
+  let raw: RawSnapshot;
+  try {
+    raw = await executeScript<RawSnapshot>(READ_PAGE_SCRIPT, READ_PAGE_TIMEOUT_MS);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `${message}\n` +
+        `Native browser state: ${formatStateForError(getState())}.\n` +
+        'The page may still be loading, may have navigated during the command, or may block DOM JavaScript injection. Use browser_get_state or wait_for_page before trying again.',
+    );
+  }
   reportNavigation({ currentUrl: raw.url, currentTitle: raw.title });
   return {
     currentUrl: raw.url,
@@ -503,24 +574,10 @@ export async function scrollPage(
   return executeScript(scrollScript(direction));
 }
 
-/** Waits (100–10000 ms, default 1500) and reports the page's ready state. */
-export async function waitForPage(
-  ms?: number,
-): Promise<{
-  readyState: string;
-  url: string;
-  title: string;
-  lastBlockedUrl?: string;
-  lastBlockedReason?: string;
-}> {
+/** Waits (100-10000 ms, default 1500) and reports native WebView state. */
+export async function waitForPage(ms?: number): Promise<BrowserState> {
+  await ensureBrowserReady();
   const delay = Math.min(10000, Math.max(100, ms ?? 1500));
   await new Promise((resolve) => setTimeout(resolve, delay));
-  const status = await executeScript<{ readyState: string; url: string; title: string }>(
-    PAGE_STATUS_SCRIPT,
-  );
-  return {
-    ...status,
-    lastBlockedUrl: state.lastBlockedUrl,
-    lastBlockedReason: state.lastBlockedReason,
-  };
+  return getState();
 }

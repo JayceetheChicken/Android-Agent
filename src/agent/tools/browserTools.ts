@@ -60,6 +60,33 @@ function formatSnapshot(page: browserService.PageSnapshot): string {
   return lines.join('\n');
 }
 
+function formatBrowserState(state: browserService.BrowserState): string {
+  const lines = [
+    `URL: ${state.currentUrl || '(unknown)'}`,
+    `Title: ${state.currentTitle || '(no title)'}`,
+    `History: ${state.canGoBack ? 'can go back' : 'no back entry'}`,
+    `Load state: ${state.loading ? 'still loading' : 'load finished'}`,
+  ];
+  if (state.lastLoadStartedAt) {
+    lines.push(`Last load started: ${new Date(state.lastLoadStartedAt).toISOString()}`);
+  }
+  if (state.lastLoadFinishedAt) {
+    lines.push(`Last load finished: ${new Date(state.lastLoadFinishedAt).toISOString()}`);
+  }
+  if (state.lastError) {
+    lines.push(`Last error: ${state.lastError}`);
+  }
+  if (state.lastHttpError) {
+    lines.push(`Last HTTP error: ${state.lastHttpError}`);
+  }
+  if (state.lastBlockedUrl) {
+    lines.push(
+      `Last blocked navigation: ${state.lastBlockedUrl} (${state.lastBlockedReason ?? 'blocked'})`,
+    );
+  }
+  return lines.join('\n');
+}
+
 /**
  * Browser tools drive the in-app WebView exclusively through browserService's
  * promise-based script bridge. Tools never see the WebView, never run
@@ -77,8 +104,18 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
   },
 
   read_page: async () => {
-    const page = await browserService.readPage();
-    return { ok: true, output: formatSnapshot(page), data: page };
+    try {
+      const page = await browserService.readPage();
+      return { ok: true, output: formatSnapshot(page), data: page };
+    } catch (error) {
+      const state = browserService.getState();
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        output: `${message}\n\nCurrent native browser state:\n${formatBrowserState(state)}`,
+        data: state,
+      };
+    }
   },
 
   click_element: async (params) => {
@@ -131,14 +168,20 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
   wait_for_page: async (params) => {
     const ms = optionalNumber(params, 'ms');
     const result = await browserService.waitForPage(ms);
-    const blocked =
-      result.lastBlockedUrl && result.lastBlockedReason
-        ? ` Last blocked navigation: ${result.lastBlockedUrl} (${result.lastBlockedReason})`
-        : '';
     return {
       ok: true,
-      output: `Page state after waiting: ${result.readyState} - ${result.url}${result.title ? ` ("${result.title}")` : ''}.${blocked}`,
+      output: `Native page state after waiting:\n${formatBrowserState(result)}`,
       data: result,
+    };
+  },
+
+  browser_get_state: async () => {
+    await browserService.ensureBrowserReady();
+    const state = browserService.getState();
+    return {
+      ok: true,
+      output: `Current native browser state:\n${formatBrowserState(state)}`,
+      data: state,
     };
   },
 
@@ -148,6 +191,17 @@ export const browserToolHandlers: Record<BrowserToolName, ToolHandler> = {
     return {
       ok: true,
       output: 'Navigated back in the mini browser. Next: wait_for_page, then read_page.',
+    };
+  },
+
+  stop_loading: async () => {
+    await browserService.ensureBrowserReady();
+    browserService.requestStopLoading();
+    const state = browserService.getState();
+    return {
+      ok: true,
+      output: `Stopped loading the current page.\n${formatBrowserState(state)}`,
+      data: state,
     };
   },
 

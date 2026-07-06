@@ -4,7 +4,7 @@ import { extractJsonObject } from '../../utils/json';
 import { describeToolsForPrompt, isToolName } from '../tools';
 
 /**
- * Prompt + parser for the Agent Loop (plan → act → observe → replan).
+ * Prompt + parser for the Agent Loop (plan -> act -> observe -> replan).
  *
  * Unlike the static planner, the model decides exactly ONE next step at a
  * time and gets the tool result back as an observation before deciding again.
@@ -32,10 +32,16 @@ export function buildLoopSystemPrompt(): string {
     '  missing instead of guessing.',
     '',
     'Browser research usually follows this pattern:',
-    '  open_url → wait_for_page → read_page → then, depending on the content:',
-    '  click_element / type_text / submit_form / scroll_page / go_back → read_page again.',
-    'After every click or submit, call wait_for_page and then read_page before deciding.',
+    '  open_url -> wait_for_page -> browser_get_state -> read_page -> then, depending on the content:',
+    '  click_element / type_text / submit_form / scroll_page / go_back -> wait_for_page -> browser_get_state -> read_page.',
+    'wait_for_page and browser_get_state use native WebView state and do not inject JavaScript.',
     'read_page returns the visible text, headings, links, buttons and input fields.',
+    'If read_page times out or fails, do not repeat it endlessly. Use browser_get_state,',
+    'optionally wait_for_page once more with a longer wait, optionally stop_loading if the',
+    'page keeps loading, then try read_page once. If it still fails, explain honestly that',
+    'the page is open but DOM reading is not available and summarize the native state.',
+    'If a web_search tool is listed, prefer it for current news/search tasks. If no such',
+    'tool exists, use the in-app browser only; DuckDuckGo Lite URLs are a reasonable fallback.',
     '',
     'Available tools:',
     describeToolsForPrompt(),
@@ -59,7 +65,7 @@ export function buildObservationsMessage(observations: AgentObservation[]): stri
   const blocks = observations.map((obs, index) => {
     let output = obs.output ?? '';
     if (output.length > MAX_OUTPUT) {
-      output = `${output.slice(0, MAX_OUTPUT)} …[truncated]`;
+      output = `${output.slice(0, MAX_OUTPUT)} ...[truncated]`;
     }
     return [
       `Observation ${index + 1}:`,

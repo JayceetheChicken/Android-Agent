@@ -35,10 +35,13 @@ Es gibt keine Claude-spezifischen Strukturen - alles ist Standard-Expo + TypeScr
   der Sandbox hochladen, verschieben, Ordner erstellen, Papierkorb und
   umbenennen. Tokens bleiben in SecureStore; Outputs enthalten nur Metadaten.
   Drive-Downloads ueberschreiben keine bestehenden Sandbox-Pfade.
-- **Browser-Tools: echt** (Stand 2026-07-05): `read_page`, `click_element`,
+- **Browser-Tools: echt** (Stand 2026-07-06): `read_page`, `click_element`,
   `type_text` (verweigert Passwortfelder und secret-artige Eingaben),
-  `submit_form` (risky), `scroll_page`, `wait_for_page`, `open_url` (risky),
-  `go_back`. Der Browser-Tab wird per `lazy: false` beim App-Start gemountet;
+  `submit_form` (risky), `scroll_page`, `wait_for_page`, `browser_get_state`,
+  `stop_loading`, `open_url` (risky), `go_back`. `wait_for_page` und
+  `browser_get_state` lesen nativen WebView-State ohne JS-Injection; `read_page`
+  nutzt weiter die Script-Bridge, hat aber laengeres Timeout und bessere
+  Diagnose mit URL/loading/error-State. Der Browser-Tab wird per `lazy: false` beim App-Start gemountet;
   `ensureBrowserReady()` wartet bei Bedarf kurz auf die WebView. WebView-
   Navigation wird mit `onShouldStartLoadWithRequest` auf `https:` und internes
   `about:blank` begrenzt. Externe Android-Intents/Schemes werden blockiert.

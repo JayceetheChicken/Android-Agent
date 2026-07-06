@@ -278,3 +278,19 @@ sind. Zusaetzlich prueft `BrowserScreen` jede WebView-Navigation mit
   `javascript:`, `file:`, `intent:`, `market:`, `tel:`, `mailto:` usw.
 - Blockierte Navigation wird im Browser-UI und in `wait_for_page` sichtbar,
   damit der Agent nach einer geblockten Aktion nicht blind weiterarbeitet.
+
+## 18. `wait_for_page` nutzt nativen WebView-State statt JS-Injection (2026-07-06)
+
+**Entscheidung:** `wait_for_page` und `browser_get_state` lesen nur noch den in
+`browserService` gespeicherten nativen WebView-State (`loading`, URL, Titel,
+Fehler, HTTP-Fehler, geblockte Navigation). Sie injizieren kein JavaScript in
+die Seite. `read_page` bleibt das DOM-Tool ueber die Script-Bridge, bekommt aber
+ein laengeres Timeout und eine Diagnose mit aktuellem Browser-State.
+
+**Warum:**
+- Warten ist Beobachtung, kein DOM-Zugriff. Es darf nicht davon abhaengen, dass
+  die Zielseite gerade JavaScript ausfuehrt und per Bridge antwortet.
+- Lang ladende oder dynamische Seiten koennen die Script-Bridge timeouten lassen;
+  der Agent braucht trotzdem einen stabilen Status, um weiterzuplanen.
+- Sicherheit bleibt unveraendert: keine freien Skripte, weiterhin nur
+  `https:`/`about:blank`, keine Android-Systemsteuerung.

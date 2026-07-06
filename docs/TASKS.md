@@ -49,7 +49,12 @@
 - [x] `submit_form`: requestSubmit/submit, Fallback Enter-Key auf fokussiertem
       Input; bleibt `risky` (Bestätigungspflicht)
 - [x] `scroll_page` (up/down, ca. eine Bildschirmhöhe)
-- [x] `wait_for_page` (100–10000 ms, meldet readyState/URL/Titel)
+- [x] `wait_for_page` (100-10000 ms, meldet nativen WebView-State ohne
+      JS-Injection; kein Bridge-Timeout mehr bei langsam ladenden Seiten)
+- [x] `browser_get_state`: nativer Browser-State ohne JS-Injection
+- [x] `stop_loading`: WebView-Laden abbrechen, um danach vorhandenes DOM lesen
+      zu koennen
+- [x] `read_page` robuster: 15s Timeout und Diagnose mit URL/loading/error-State
 - [x] Browser-Tab automatisch verfügbar: `lazy: false` mountet die WebView beim
       App-Start; `ensureBrowserReady()` als Sicherheitsnetz (2026-07-05)
 - [x] WebView-Navigation gehärtet: `onShouldStartLoadWithRequest` +

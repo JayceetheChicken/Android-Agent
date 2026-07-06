@@ -324,8 +324,17 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: 'wait_for_page',
     category: 'browser',
     description:
-      'Wait briefly so a page can finish loading dynamic content, then report its ready state.',
+      'Wait briefly, then report native WebView state without injecting page JavaScript. Use this after open_url/click/submit.',
     params: { ms: 'number – optional wait in milliseconds (100–10000, default 1500)' },
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'browser_get_state',
+    category: 'browser',
+    description:
+      'Report the current native WebView state (URL, title, loading, last errors, blocked navigation) without injecting page JavaScript.',
+    params: {},
     risky: false,
     mock: false,
   },
@@ -333,6 +342,15 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     name: 'go_back',
     category: 'browser',
     description: 'Navigate back in the mini browser history.',
+    params: {},
+    risky: false,
+    mock: false,
+  },
+  {
+    name: 'stop_loading',
+    category: 'browser',
+    description:
+      'Stop the WebView from loading the current page. Useful before read_page when a page keeps loading indefinitely.',
     params: {},
     risky: false,
     mock: false,

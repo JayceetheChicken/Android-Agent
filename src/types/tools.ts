@@ -27,7 +27,9 @@ export const BROWSER_TOOL_NAMES = [
   'submit_form',
   'scroll_page',
   'wait_for_page',
+  'browser_get_state',
   'go_back',
+  'stop_loading',
   'screenshot_page',
   'download_file',
 ] as const;
