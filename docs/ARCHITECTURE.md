@@ -331,8 +331,9 @@ Agent-Tool (driveTools.ts)          DriveScreen
    werden als abgelehnte Promises propagiert; Timeouts (6–10 s) fangen den
    Fall ab, dass die Seite navigiert, bevor sie antwortet.
 
-Darauf implementiert: `readPage()` (sichtbarer Text max. 6000 Zeichen,
-Headings/Links/Buttons/Inputs je max. 50, unsichtbare Elemente gefiltert),
+Darauf implementiert: `readPage()` als leichter DOM-Extractor (kein
+`document.body.innerText`, sichtbarer Text max. 6000 Zeichen, Meta-Description
+und Links als Fallback, Headings max. 30, Links max. 40, Buttons/Inputs max. 30),
 `clickElement()` (CSS-Selektor, Fallback sichtbarer Text), `typeText()`
 (input/change-Events, **verweigert Passwortfelder**), `submitForm()`
 (requestSubmit, Fallback Enter-Key; Tool bleibt bestätigungspflichtig),

@@ -14,6 +14,9 @@ function formatSnapshot(page: browserService.PageSnapshot): string {
     `URL: ${page.currentUrl}`,
     `Title: ${page.currentTitle || '(no title)'}`,
   ];
+  if (page.metaDescription) {
+    lines.push(`Meta description: ${page.metaDescription}`);
+  }
   if (page.headings.length > 0) {
     lines.push(
       '',

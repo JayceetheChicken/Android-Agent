@@ -40,7 +40,8 @@ Es gibt keine Claude-spezifischen Strukturen - alles ist Standard-Expo + TypeScr
   `submit_form` (risky), `scroll_page`, `wait_for_page`, `browser_get_state`,
   `stop_loading`, `open_url` (risky), `go_back`. `wait_for_page` und
   `browser_get_state` lesen nativen WebView-State ohne JS-Injection; `read_page`
-  nutzt weiter die Script-Bridge, hat aber laengeres Timeout und bessere
+  nutzt weiter die Script-Bridge, ist aber ein leichter Extractor ohne
+  `body.innerText`, mit Meta-/Link-Fallback, laengerem Timeout und besserer
   Diagnose mit URL/loading/error-State. Der Browser-Tab wird per `lazy: false` beim App-Start gemountet;
   `ensureBrowserReady()` wartet bei Bedarf kurz auf die WebView. WebView-
   Navigation wird mit `onShouldStartLoadWithRequest` auf `https:` und internes

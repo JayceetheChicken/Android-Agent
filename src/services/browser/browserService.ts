@@ -41,6 +41,7 @@ export interface PageSnapshot {
   currentUrl: string;
   currentTitle: string;
   canGoBack: boolean;
+  metaDescription?: string;
   text: string;
   headings: Array<{ level: number; text: string }>;
   links: Array<{ text: string; href: string }>;
@@ -341,48 +342,103 @@ function __label(el){
 
 const READ_PAGE_SCRIPT = `
 ${HELPERS}
-var MAX_TEXT=6000, MAX_LIST=50, MAX_HEADINGS=30;
-var text=__clean(document.body?document.body.innerText:'');
-if(text.length>MAX_TEXT)text=text.slice(0,MAX_TEXT)+' …[truncated]';
-var headings=[];
-var hs=document.querySelectorAll('h1,h2,h3,h4,h5,h6');
-for(var i=0;i<hs.length&&headings.length<MAX_HEADINGS;i++){
-  if(!__vis(hs[i]))continue;
-  var ht=__clean(hs[i].innerText);
-  if(ht)headings.push({level:parseInt(hs[i].tagName.slice(1),10),text:ht.slice(0,120)});
+var MAX_TEXT=6000, MAX_HEADINGS=30, MAX_LINKS=40, MAX_BUTTONS=30, MAX_INPUTS=30, MAX_PER_ELEMENT=200;
+var headings=[], links=[], buttons=[], inputs=[], textParts=[], warnings=[];
+function safeClean(t,limit){
+  t=String(t||'').replace(/\\s+/g,' ').trim();
+  if(limit&&t.length>limit)t=t.slice(0,limit)+'...';
+  return t;
 }
-var links=[];
-var as=document.querySelectorAll('a[href]');
-for(var i=0;i<as.length&&links.length<MAX_LIST;i++){
-  var a=as[i];
-  if(!__vis(a))continue;
-  var lt=__label(a);
-  if(!lt||a.href.indexOf('javascript:')===0)continue;
-  links.push({text:lt.slice(0,80),href:a.href});
+function safeText(el,limit){
+  try{
+    if(!el)return '';
+    var t=el.textContent||el.value||el.getAttribute('aria-label')||el.getAttribute('alt')||el.getAttribute('title')||'';
+    return safeClean(t,limit||MAX_PER_ELEMENT);
+  }catch(e){return '';}
 }
-var buttons=[];
-var bs=document.querySelectorAll('button,[role="button"],input[type="submit"],input[type="button"]');
-for(var i=0;i<bs.length&&buttons.length<MAX_LIST;i++){
-  if(!__vis(bs[i]))continue;
-  var bt=__label(bs[i]);
-  if(bt)buttons.push({text:bt.slice(0,80)});
+function isVisibleFast(el){
+  try{
+    if(!el||el.nodeType!==1)return false;
+    var tag=el.tagName;
+    if(!tag)return false;
+    tag=tag.toLowerCase();
+    if(tag==='script'||tag==='style'||tag==='noscript'||tag==='svg'||tag==='template')return false;
+    if(el.hidden||el.getAttribute('aria-hidden')==='true')return false;
+    var inlineStyle=(el.getAttribute('style')||'').toLowerCase();
+    if(inlineStyle.indexOf('display:none')!==-1||inlineStyle.indexOf('visibility:hidden')!==-1)return false;
+    if(window.getComputedStyle){
+      var s=window.getComputedStyle(el);
+      if(s&&(s.display==='none'||s.visibility==='hidden'||s.opacity==='0'))return false;
+    }
+    return true;
+  }catch(e){return false;}
 }
-var inputs=[];
-var ins=document.querySelectorAll('input,textarea,select,[contenteditable="true"]');
-for(var i=0;i<ins.length&&inputs.length<MAX_LIST;i++){
-  var el=ins[i];
-  if(!__vis(el))continue;
-  if(el.tagName==='INPUT'&&el.type==='hidden')continue;
-  var entry={tag:el.tagName.toLowerCase()};
-  if(el.type)entry.type=el.type;
-  if(el.name)entry.name=el.name;
-  if(el.id)entry.id=el.id;
-  if(el.placeholder)entry.placeholder=el.placeholder;
-  var al=el.getAttribute('aria-label');
-  if(al)entry.ariaLabel=al;
-  inputs.push(entry);
+function pushText(t){
+  t=safeClean(t,MAX_PER_ELEMENT);
+  if(!t)return;
+  var current=textParts.join('\\n').length;
+  if(current>=MAX_TEXT)return;
+  if(current+t.length>MAX_TEXT)t=t.slice(0,Math.max(0,MAX_TEXT-current))+'...';
+  textParts.push(t);
 }
-return {url:location.href,title:document.title,text:text,headings:headings,links:links,buttons:buttons,inputs:inputs};
+function each(selector,limit,fn){
+  var nodes=[];
+  try{nodes=document.querySelectorAll(selector);}catch(e){warnings.push('selector failed: '+selector);return;}
+  for(var i=0;i<nodes.length;i++){
+    if(i>250)break;
+    try{
+      if(!isVisibleFast(nodes[i]))continue;
+      fn(nodes[i]);
+    }catch(e){
+      warnings.push('element skipped');
+    }
+    if(limit&&limit())break;
+  }
+}
+var meta='';
+try{
+  var metaEl=document.querySelector('meta[name="description"],meta[property="og:description"]');
+  meta=safeClean(metaEl?metaEl.getAttribute('content'):'',300);
+}catch(e){meta='';}
+try{
+  each('h1,h2,h3,h4,h5,h6',function(){return headings.length>=MAX_HEADINGS;},function(el){
+    var ht=safeText(el,140);
+    if(!ht)return;
+    headings.push({level:parseInt(el.tagName.slice(1),10)||1,text:ht});
+    pushText(ht);
+  });
+  each('main p,main li,main a,main button,article p,article li,article a,article button,h1,h2,h3,p,li,a,button',function(){
+    return textParts.join('\\n').length>=MAX_TEXT;
+  },function(el){pushText(safeText(el,MAX_PER_ELEMENT));});
+  each('a[href]',function(){return links.length>=MAX_LINKS;},function(a){
+    var href=String(a.href||'');
+    if(!href||href.indexOf('javascript:')===0)return;
+    var lt=safeText(a,100);
+    if(lt)links.push({text:lt,href:href});
+  });
+  each('button,[role="button"],input[type="submit"],input[type="button"]',function(){return buttons.length>=MAX_BUTTONS;},function(el){
+    var bt=safeText(el,100);
+    if(bt)buttons.push({text:bt});
+  });
+  each('input,textarea,select,[contenteditable="true"]',function(){return inputs.length>=MAX_INPUTS;},function(el){
+    if(el.tagName==='INPUT'&&el.type==='hidden')return;
+    var entry={tag:el.tagName.toLowerCase()};
+    if(el.type)entry.type=String(el.type).slice(0,40);
+    if(el.name)entry.name=String(el.name).slice(0,80);
+    if(el.id)entry.id=String(el.id).slice(0,80);
+    if(el.placeholder)entry.placeholder=String(el.placeholder).slice(0,120);
+    var al=el.getAttribute('aria-label');
+    if(al)entry.ariaLabel=String(al).slice(0,120);
+    inputs.push(entry);
+  });
+}catch(e){
+  warnings.push('partial extraction failed: '+String(e&&e.message?e.message:e));
+}
+if(textParts.length===0){
+  if(meta)pushText(meta);
+  for(var li=0;li<links.length&&textParts.join('\\n').length<MAX_TEXT;li++)pushText(links[li].text);
+}
+return {url:location.href,title:document.title,metaDescription:meta,text:textParts.join('\\n'),headings:headings,links:links,buttons:buttons,inputs:inputs,warnings:warnings.slice(0,5)};
 `;
 
 function clickScript(selectorOrText: string): string {
@@ -479,6 +535,7 @@ return {scrollY:Math.max(0,Math.round(window.scrollY+delta)),pageHeight:Math.rou
 interface RawSnapshot {
   url: string;
   title: string;
+  metaDescription?: string;
   text: string;
   headings: Array<{ level: number; text: string }>;
   links: Array<{ text: string; href: string }>;
@@ -497,7 +554,7 @@ export async function readPage(): Promise<PageSnapshot> {
     throw new Error(
       `${message}\n` +
         `Native browser state: ${formatStateForError(getState())}.\n` +
-        'The page may still be loading, may have navigated during the command, or may block DOM JavaScript injection. Use browser_get_state or wait_for_page before trying again.',
+        'DOM reading was technically unsuccessful or too slow. The page may still be loading, may have navigated during the command, or may be too large/dynamic for this extractor. Use browser_get_state or wait_for_page before trying again.',
     );
   }
   reportNavigation({ currentUrl: raw.url, currentTitle: raw.title });
@@ -505,6 +562,7 @@ export async function readPage(): Promise<PageSnapshot> {
     currentUrl: raw.url,
     currentTitle: raw.title,
     canGoBack: state.canGoBack,
+    metaDescription: raw.metaDescription,
     text: raw.text,
     headings: raw.headings,
     links: raw.links,

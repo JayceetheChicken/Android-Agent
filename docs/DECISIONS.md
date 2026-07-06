@@ -284,8 +284,9 @@ sind. Zusaetzlich prueft `BrowserScreen` jede WebView-Navigation mit
 **Entscheidung:** `wait_for_page` und `browser_get_state` lesen nur noch den in
 `browserService` gespeicherten nativen WebView-State (`loading`, URL, Titel,
 Fehler, HTTP-Fehler, geblockte Navigation). Sie injizieren kein JavaScript in
-die Seite. `read_page` bleibt das DOM-Tool ueber die Script-Bridge, bekommt aber
-ein laengeres Timeout und eine Diagnose mit aktuellem Browser-State.
+die Seite. `read_page` bleibt das DOM-Tool ueber die Script-Bridge, nutzt aber
+einen leichten Extractor ohne `document.body.innerText`, bekommt ein laengeres
+Timeout und eine Diagnose mit aktuellem Browser-State.
 
 **Warum:**
 - Warten ist Beobachtung, kein DOM-Zugriff. Es darf nicht davon abhaengen, dass

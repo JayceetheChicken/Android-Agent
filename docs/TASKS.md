@@ -55,6 +55,8 @@
 - [x] `stop_loading`: WebView-Laden abbrechen, um danach vorhandenes DOM lesen
       zu koennen
 - [x] `read_page` robuster: 15s Timeout und Diagnose mit URL/loading/error-State
+- [x] `read_page` Lightweight-Extractor: kein `body.innerText`, frueher Abbruch,
+      Meta-Description/Links-Fallback fuer grosse dynamische Seiten
 - [x] Browser-Tab automatisch verfügbar: `lazy: false` mountet die WebView beim
       App-Start; `ensureBrowserReady()` als Sicherheitsnetz (2026-07-05)
 - [x] WebView-Navigation gehärtet: `onShouldStartLoadWithRequest` +

@@ -40,6 +40,7 @@ export function buildLoopSystemPrompt(): string {
     'optionally wait_for_page once more with a longer wait, optionally stop_loading if the',
     'page keeps loading, then try read_page once. If it still fails, explain honestly that',
     'the page is open but DOM reading is not available and summarize the native state.',
+    'Do not claim the site blocks DOM access unless lastError or lastHttpError supports that.',
     'If a web_search tool is listed, prefer it for current news/search tasks. If no such',
     'tool exists, use the in-app browser only; DuckDuckGo Lite URLs are a reasonable fallback.',
     '',
